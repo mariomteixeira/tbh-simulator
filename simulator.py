@@ -614,6 +614,13 @@ def fit_clear_model(samples: list, now: float | None = None, hp_of=None):
         pts.append((w, s.get("waves") or 0, hp / pd, cs, s["stage"], src))
     if not pts:
         return None
+    # amostra manual (cronometrada) e verdade-base. O automatico deriva de
+    # totalClears, que se mostrou NAO-confiavel (conta ~Nx mais que runs reais,
+    # deixando o clearSec curto demais). Entao: havendo QUALQUER manual, o
+    # automatico e ignorado no ajuste.
+    manual_pts = [p for p in pts if p[5] == "manual"]
+    if manual_pts:
+        pts = manual_pts
 
     def solve2(points):
         # 2 parametros (tWave, q=1/c) com T_fixo preso em T_FIXED
