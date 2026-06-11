@@ -1,0 +1,23 @@
+# Estado derivado do seu save — nunca versionar.
+# Muda toda hora e pode "enviar informacao errada"; e re-derivavel jogando.
+/data/
+*.es3
+
+# Clone de terceiros, mantido so pra comparacao local (nao vendorizar — ver README).
+/reference/
+
+# Dependencias e build do frontend (regeneraveis: npm install / npm run build).
+/frontend/node_modules/
+/frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Config local da ferramenta / editores / ambiente
+/.claude/settings.local.json
+.vscode/
+.idea/
+.venv/
+venv/

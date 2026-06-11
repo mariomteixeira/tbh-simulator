@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TBH Copilot</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>TBH <span>Copilot</span></h1>
+  <div id="conn" class="conn">conectando…</div>
+</header>
+
+<div id="banner" class="banner hidden"></div>
+
+<main>
+  <!-- Cartões de resumo -->
+  <section class="cards">
+    <div class="card">
+      <div class="card-label">Gold</div>
+      <div class="card-value gold" id="gold">—</div>
+      <div class="card-sub" id="gold-rate">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DPS do time</div>
+      <div class="card-value" id="party-dps">—</div>
+      <div class="card-sub" id="calib">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Estágio atual</div>
+      <div class="card-value" id="stage">—</div>
+      <div class="card-sub" id="max-stage">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Tempo de jogo</div>
+      <div class="card-value" id="playtime">—</div>
+      <div class="card-sub" id="last-save">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Sessão</div>
+      <div class="card-value" id="session-gold-rate">—</div>
+      <div class="card-sub" id="session-span">—</div>
+    </div>
+  </section>
+
+  <!-- Recomendações -->
+  <section class="panel" id="coach-panel">
+    <h2>Copilot</h2>
+    <div id="coach" class="coach"></div>
+  </section>
+
+  <!-- Farm: melhores estágios -->
+  <section class="panel">
+    <h2>Farm — taxas reais por estágio <span class="h2-note" id="farm-note"></span></h2>
+    <table class="farm" id="farm-table">
+      <thead>
+        <tr><th>Estágio</th><th>Lvl</th><th class="num">Clear</th>
+            <th class="num">Gold/h</th><th class="num">Exp/h</th><th>Perigo</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- Heróis -->
+  <section class="panel">
+    <h2>Time</h2>
+    <div id="heroes" class="heroes"></div>
+  </section>
+
+  <!-- Gráfico de gold -->
+  <section class="panel">
+    <h2>Gold na sessão</h2>
+    <div id="chart-wrap"><svg id="chart" preserveAspectRatio="none"></svg></div>
+  </section>
+</main>
+
+<footer>somente leitura · o save original nunca é tocado · dados do jogo: taskbarhero.wiki</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""
+TBH Copilot - backend local + painel web
+========================================
+
+Usa o tbh_tracker.py como biblioteca (decriptacao, parsing, taxas) e o
+simulator.py como engine (DPS, EHP, economia de estagios), e expoe tudo
+numa API JSON local servida com FastAPI. A interface fica no navegador
+(pasta web/), atualizada por polling.
+
+Uso:
+    pip install -r requirements.txt
+    python fetch_gamedata.py              # uma vez, baixa dados do jogo
+    python server.py                      # http://127.0.0.1:8423
+    python server.py --port 9000
+    python server.py --save C:\caminho\SaveFile_Live.es3
+
+Tudo continua 100% passivo: o save original nunca e aberto em escrita.
+"""
+
+import argparse
+import threading
+import time
+from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+import tbh_tracker as core
+from simulator import GameData, simulate, make_clear_sample
+from store import Store
+
+ROOT = Path(__file__).parent
+WEB_DIR = ROOT / "web"
+DIST_DIR = ROOT / "frontend" / "dist"
+GAMEDATA_DIR = ROOT / "gamedata"
+STORE_PATH = ROOT / "data" / "store.json"
+HISTORY_MAX = 1000  # pontos de historico devolvidos pela API
+
+
+class SaveWatcher:
+    """Thread que vigia o save e mantem o ultimo estado pronto para a API."""
+
+    def __init__(self, save_path: Path, store: Store,
+                 interval: float = 2.0, debounce: float = 1.0):
+        self.save_path = save_path
+        self.store = store
+        self.interval = interval
+        self.debounce = debounce
+
+        self.lock = threading.Lock()
+        self.state = None          # ultimo parse_state()
+        self.first_state = None    # primeiro da sessao (para taxa media)
+        self.rates = None          # entre os dois ultimos saves
+        self.session_rates = None  # entre o primeiro e o ultimo save
+        self.sim = None            # resultado do simulator.simulate()
+        self.sim_error = None
+        self.error = None
+        self.last_read = None      # epoch da ultima leitura ok
+        self.sample_anchor = None   # save onde a janela de medicao abriu
+        self.sample_aligned = False  # janela atual comeca no fim de uma run?
+        self.sample_log = []        # decisoes de janela (auditoria na aba Modelo)
+
+        self.gamedata = None
+        self.gamedata_error = None
+        try:
+            self.gamedata = GameData(GAMEDATA_DIR)
+        except FileNotFoundError as e:
+            self.gamedata_error = (f"gamedata nao encontrado ({e}); "
+                                   "rode: python fetch_gamedata.py")
+        except Exception as e:
+            self.gamedata_error = f"gamedata invalido: {e}"
+
+    def start(self):
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    # -- loop de vigilancia ------------------------------------------------
+    def _loop(self):
+        self._read()  # leitura inicial, sem esperar o save mudar
+        last_mtime = self._mtime()
+        while True:
+            time.sleep(self.interval)
+            m = self._mtime()
+            if m is None or m == last_mtime:
+                continue
+            last_mtime = m
+            time.sleep(self.debounce)  # deixa o jogo terminar de gravar
+            self._read()
+
+    def _mtime(self):
+        try:
+            return self.save_path.stat().st_mtime
+        except OSError:
+            return None
+
+    def _measured(self):
+        """Taxas medidas para calibrar o simulador (prefere a media da sessao)."""
+        r = self.session_rates or self.rates
+        if not r or r["dt_hours"] <= 0:
+            return {}
+        out = {}
+        if r["gold_per_hour"] and r["gold_per_hour"] > 0:
+            out["goldPerSec"] = r["gold_per_hour"] / 3600
+        exp_total = sum(v for v in r["exp_per_hour"].values() if v and v > 0)
+        if exp_total > 0:
+            out["expPerSec"] = exp_total / 3600
+        out["expPerHourByHero"] = {k: v for k, v in r["exp_per_hour"].items()
+                                   if v and v > 0}
+        return out
+
+    def _read(self):
+        if not self.save_path.exists():
+            with self.lock:
+                self.error = f"save nao encontrado: {self.save_path}"
+            return
+        try:
+            inner = core.safe_copy_and_decrypt(self.save_path)
+            state = core.parse_state(inner)
+        except (ValueError, OSError) as e:
+            # gravacao em andamento ou lock momentaneo: tenta no proximo ciclo
+            with self.lock:
+                self.error = f"leitura falhou ({e}); tentando de novo"
+            return
+
+        with self.lock:
+            self.error = None
+            self.last_read = time.time()
+            prev_state = self.state
+            if prev_state and state["lastSavedTime"] != prev_state["lastSavedTime"]:
+                self.rates = core.compute_rates(prev_state, state)
+            if self.first_state is None:
+                self.first_state = state
+            elif state["lastSavedTime"] > self.first_state["lastSavedTime"]:
+                self.session_rates = core.compute_rates(self.first_state, state)
+            self.state = state
+            measured = self._measured()
+
+        self.store.add_history({
+            "ts": time.time(),
+            "ticks": state["lastSavedTime"],
+            "playTime": state["playTime"],
+            "gold": state["gold"],
+            "heroes": {h["name"]: {"level": h["level"], "exp": h["exp"]}
+                       for h in state["heroes"]},
+        })
+
+        # simulacao fora do lock (le tabelas proprias, nao o estado compartilhado)
+        sim, sim_error = None, None
+        if self.gamedata:
+            try:
+                sim = simulate(self.gamedata, inner, measured,
+                               samples=self.store.samples(),
+                               stage_stats=self.store.stage_stats())
+            except Exception as e:
+                sim_error = f"simulador falhou: {e}"
+
+        # janela de medicao de clears: abre ao entrar num mapa e fecha quando
+        # o contador de runs do save avanca (runs longas atravessam varios
+        # saves sem problema)
+        if sim:
+            try:
+                anchor = self.sample_anchor
+                if (anchor is None
+                        or state.get("currentStage") != anchor.get("currentStage")):
+                    self.sample_anchor = state
+                    self.sample_aligned = False
+                    self._log_sample({"why": "janela aberta (alinhando no fim da run)",
+                                      "stage": state.get("currentStage")})
+                elif state["lastSavedTime"] != anchor["lastSavedTime"]:
+                    sample, keep, info = make_clear_sample(
+                        self.gamedata, inner, anchor, state, sim["party"]["dps"])
+                    if sample and not self.sample_aligned:
+                        # 1a janela apos entrar no mapa pode ter comecado no
+                        # meio de uma run: serve so para alinhar o relogio
+                        info["why"] = "alinhado no fim da run (janela descartada)"
+                        self._log_sample(info)
+                        self.sample_anchor = state
+                        self.sample_aligned = True
+                    elif sample:
+                        self._log_sample(info)
+                        self.store.add_sample(sample)
+                        if info.get("killsPorRun"):
+                            self.store.add_stage_obs(
+                                sample["stage"], info["killsPorRun"],
+                                sample["clears"])
+                        self.sample_anchor = state
+                    elif not keep:
+                        self._log_sample(info)
+                        self.sample_anchor = state
+                        self.sample_aligned = False
+                    elif "acumulando" not in info.get("why", ""):
+                        self._log_sample(info)
+            except Exception as e:
+                self._log_sample({"why": f"erro na amostragem: {e}"})
+
+        with self.lock:
+            self.sim = sim if sim else self.sim
+            self.sim_error = sim_error
+
+    def _log_sample(self, info: dict):
+        with self.lock:
+            self.sample_log.append({"ts": time.time(), **info})
+            if len(self.sample_log) > 50:
+                self.sample_log = self.sample_log[-50:]
+
+    # -- snapshot para a API -------------------------------------------------
+    def snapshot(self):
+        with self.lock:
+            return {
+                "status": {
+                    "savePath": str(self.save_path),
+                    "saveFound": self.save_path.exists(),
+                    "gamedataLoaded": self.gamedata is not None,
+                    "gamedataError": self.gamedata_error,
+                    "simError": self.sim_error,
+                    "lastRead": self.last_read,
+                    "error": self.error,
+                },
+                "state": self.state,
+                "rates": self.rates,
+                "sessionRates": self.session_rates,
+                "sim": self.sim,
+                "history": self.store.history()[-HISTORY_MAX:],
+                "samples": self.store.samples()[-50:],
+                "sampleLog": self.sample_log[-20:],
+            }
+
+
+def build_app(watcher: SaveWatcher) -> FastAPI:
+    app = FastAPI(title="TBH Copilot", docs_url=None, redoc_url=None)
+
+    @app.get("/api/snapshot")
+    def api_snapshot():
+        return watcher.snapshot()
+
+    # serve o frontend buildado (frontend/dist); cai para o web/ legado
+    static_dir = DIST_DIR if (DIST_DIR / "index.html").exists() else WEB_DIR
+
+    @app.get("/")
+    def index():
+        # index.html nunca e cacheado (os assets tem hash no nome, entao
+        # cada build novo aparece no navegador sem precisar de Ctrl+F5)
+        return FileResponse(static_dir / "index.html",
+                            headers={"Cache-Control": "no-cache"})
+
+    app.mount("/assets", StaticFiles(directory=static_dir / "assets")
+              if (static_dir / "assets").exists()
+              else StaticFiles(directory=static_dir), name="assets")
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    return app
+
+
+def main():
+    ap = argparse.ArgumentParser(description="TBH Copilot - backend + painel web")
+    ap.add_argument("--save", type=Path, default=core.DEFAULT_SAVE)
+    ap.add_argument("--port", type=int, default=8423)
+    ap.add_argument("--interval", type=float, default=2.0)
+    ap.add_argument("--debounce", type=float, default=1.0)
+    args = ap.parse_args()
+
+    store = Store(STORE_PATH)
+    watcher = SaveWatcher(args.save, store,
+                          interval=args.interval, debounce=args.debounce)
+    watcher.start()
+
+    app = build_app(watcher)
+    print(f"\n  TBH Copilot rodando em  http://127.0.0.1:{args.port}\n")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+
+
+if __name__ == "__main__":
+    main()
