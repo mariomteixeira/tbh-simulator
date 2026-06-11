@@ -136,20 +136,12 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             <i>fator (kill ÷ DPS teórico)</i>
             <b>{cal.factor ?? "—"}</b>
           </div>
-          <div className="kv-big">
-            <i>correção wiki→real (economia)</i>
-            <b>
-              ×{sim.econScale?.global ?? 1}{" "}
-              <span className="muted">
-                ({Object.keys(sim.econScale?.stages || {}).length} fase(s) medidas)
-              </span>
-            </b>
-          </div>
         </div>
         <p className="muted small" style={{ marginTop: 8 }}>
-          A composição de monstros da wiki se mostrou inflada em algumas fases;
-          o sistema aprende kills/run reais dos contadores do save e corrige
-          HP/gold/exp por fase (fases sem medição herdam a mediana).
+          Economia (gold/exp por run) vem do reward dataminado da wiki direto,
+          como o Farming Planner. O tempo de clear vem das suas calibrações
+          manuais; o contador de "clears" do save conta várias vezes por run e
+          não é usado.
         </p>
       </div>
 
@@ -252,30 +244,28 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
         <h2>Como o tempo é medido</h2>
         <ul className="method-list">
           <li>
-            Entre dois saves <b>no mesmo mapa</b>, o contador interno de clears
-            do save dá o número <b>exato</b> de runs do intervalo; tempo do
-            intervalo ÷ runs = tempo por run.
+            <b>Você cronometra</b> uma run e digita o tempo em segundos (no card
+            acima). É a verdade-base: um único tempo já ancora a velocidade de
+            kill, e quanto mais fases você cronometrar, melhor a curva.
           </li>
           <li>
-            O contador de kills valida cada amostra: se você <b>trocou de mapa
-            no meio</b>, os kills não batem com runs × monstros-por-run da fase
-            e a amostra é <b>descartada</b> — trocar de mapa nunca contamina o
-            modelo, só deixa de gerar amostra naquele intervalo.
+            O modelo é <b>tempo = overhead·waves + HP ÷ velocidade de kill</b>,
+            ajustado aos seus tempos — igual ao Farming Planner da wiki. Com 3+
+            tempos ele separa o overhead por wave da velocidade de kill.
           </li>
           <li>
-            Com 3+ amostras, uma regressão ajusta o overhead por wave e a
-            velocidade de kill aos seus dados (amostras antigas pesam menos,
-            meia-vida de 14 dias, normalizadas pelo DPS da época).
+            O contador de "clears" do save <b>não é confiável</b> (conta várias
+            vezes por run), então o automático derivado dele é ignorado sempre
+            que há qualquer tempo manual.
           </li>
           <li>
-            Sem amostras, o modelo ancora no gold/h da sessão (escala linear
-            por HP — é por isso que fases distantes da atual podem mostrar
-            tempo errado no começo; a tabela acima mostra o erro caindo
-            conforme as amostras chegam).
+            EXP por hora aplica a <b>curva de EXP por nível</b> do jogo (fases
+            muito abaixo do seu nível rendem quase nada de exp) e ancora no
+            exp/h medido da sessão.
           </li>
           <li>
-            Bosses de ato não entram na tabela de farm: a run de boss não é um
-            loop contínuo e o rendimento por hora não se aplica.
+            Bosses de ato não entram na tabela: a run de boss não é um loop
+            contínuo e o rendimento por hora não se aplica.
           </li>
         </ul>
       </div>
