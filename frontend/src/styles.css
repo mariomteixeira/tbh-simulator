@@ -263,3 +263,24 @@ table.mini.wide td, table.mini.wide th { padding: 6px 10px; font-size: .83rem; }
 table.mini { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: 8px; }
 table.mini th { text-align: left; color: var(--muted); font-weight: 500; padding: 3px 6px; font-size: .68rem; text-transform: uppercase; }
 table.mini td { padding: 4px 6px; border-top: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
+
+/* ======================== calibracao manual ======================== */
+.cal-form { display: flex; flex-direction: column; gap: 9px; }
+.cal-stage { font-size: .88rem; }
+.cal-row { display: flex; align-items: center; gap: 8px; }
+.cal-row input {
+  width: 130px; background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 8px 10px;
+  font: inherit; font-variant-numeric: tabular-nums;
+}
+.cal-row input:focus { outline: none; border-color: var(--accent); }
+.cal-row button {
+  background: var(--accent); color: #06101f; border: none; border-radius: 8px;
+  padding: 8px 18px; font: inherit; font-weight: 650; cursor: pointer;
+}
+.cal-row button:disabled { opacity: .4; cursor: default; }
+button.link {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: .8rem; text-decoration: underline; padding: 0;
+}
+button.link:hover { color: var(--red); }

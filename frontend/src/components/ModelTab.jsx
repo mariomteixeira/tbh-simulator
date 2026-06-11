@@ -7,7 +7,7 @@ function median(arr) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-export default function ModelTab({ sim, samples, sampleLog }) {
+export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
   const cal = sim.calibration;
   const rowByKey = {};
   for (const r of sim.farm.rows || []) rowByKey[r.key] = r;
@@ -37,8 +37,82 @@ export default function ModelTab({ sim, samples, sampleLog }) {
   const killRate = sim.party?.dps && cal.factor ? sim.party.dps * cal.factor : null;
   const recent = [...(samples || [])].reverse().slice(0, 30);
 
+  const [secs, setSecs] = React.useState("");
+  const curRow = (sim.farm.rows || []).find((r) => r.current);
+  async function saveCal(stageKey) {
+    const v = parseFloat(secs);
+    if (!v || v <= 0) return;
+    await fetch("/api/calibration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: Number(stageKey), clearSec: v }),
+    });
+    setSecs("");
+  }
+  async function removeCal(stageKey) {
+    await fetch("/api/calibration/" + stageKey, { method: "DELETE" });
+  }
+
   return (
     <div className="model-grid">
+      <div className="card">
+        <h2>Calibrar tempo de clear (manual)</h2>
+        <p className="muted small">
+          Cronometre uma run e digite o tempo <b>em segundos</b>. Vale como
+          verdade-base (peso alto) e melhora o modelo na hora — um único tempo
+          já ancora a velocidade de kill.
+        </p>
+        {curRow ? (
+          <div className="cal-form">
+            <div className="cal-stage">
+              fase atual: <b>{curRow.tag} {curRow.label}</b>{" "}
+              <span className="muted">{curRow.name}</span>
+              {curRow.clearTime != null && (
+                <span className="muted"> · previsto agora {fmtDur(curRow.clearTime)}</span>
+              )}
+            </div>
+            <div className="cal-row">
+              <input
+                type="number" min="1" step="1" placeholder="segundos"
+                value={secs}
+                onChange={(e) => setSecs(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveCal(curRow.key)}
+              />
+              <span className="muted">s</span>
+              <button onClick={() => saveCal(curRow.key)} disabled={!secs}>
+                Salvar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="muted small">aguardando o save pra saber a fase atual…</p>
+        )}
+        {manualSamples?.length > 0 && (
+          <table className="mini wide">
+            <thead>
+              <tr><th>fase</th><th>tempo (s)</th><th>dps na época</th><th></th></tr>
+            </thead>
+            <tbody>
+              {manualSamples.map((m) => {
+                const row = rowByKey[m.stage];
+                return (
+                  <tr key={m.stage}>
+                    <td>{row ? `${row.tag} ${row.label}` : m.stage}</td>
+                    <td>{Math.round(m.clearSec)}s</td>
+                    <td>{fmt(m.partyDps)}</td>
+                    <td>
+                      <button className="link" onClick={() => removeCal(m.stage)}>
+                        remover
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="card">
         <h2>Estado da calibração</h2>
         <div className="model-stats">

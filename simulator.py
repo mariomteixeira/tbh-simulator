@@ -50,6 +50,8 @@ BASIC_ATTACK_MULT = 1.9
 # com o gold/h medido substitui a escala absoluta quando ha dados.
 T_FIXED = 1.0
 T_WAVE = 5.0
+W_MANUAL = 20.0       # peso de uma amostra manual (cronometrada) na regressao;
+                      # ~4x uma janela automatica perfeita (clears saturado em 5)
 # [estimativa] quantos monstros batem em voce ao mesmo tempo, para o
 # calculo de perigo (uma wave pode ter 13 monstros, mas nem todos alcancam)
 MAX_CONCURRENT = 4
@@ -502,7 +504,13 @@ def make_clear_sample(gd: GameData, save: dict, anchor_state: dict,
     if stage != anchor_state.get("currentStage"):
         info["why"] = "trocou de mapa (janela reaberta)"
         return None, False, info
-    dt = (state["lastSavedTime"] - anchor_state["lastSavedTime"]) / 1e7
+    # tempo da janela: prefere playTime (segundos de jogo; ignora tempo de jogo
+    # fechado), cai pro lastSavedTime (.NET ticks) quando playTime nao veio
+    pt0, pt1 = anchor_state.get("playTime"), state.get("playTime")
+    if pt0 is not None and pt1 is not None:
+        dt = pt1 - pt0
+    else:
+        dt = (state["lastSavedTime"] - anchor_state["lastSavedTime"]) / 1e7
     info["dt"] = round(dt, 1)
     if dt < 15:
         info["why"] = "janela curta, acumulando"
@@ -570,74 +578,130 @@ def make_clear_sample(gd: GameData, save: dict, anchor_state: dict,
 def fit_clear_model(samples: list, now: float | None = None, hp_of=None):
     """Regressao linear ponderada sobre as amostras de clear.
 
-    Modelo:  clearSec - T_FIXED = tWave * waves + (1/c) * (hp / partyDps)
+    Modelo:  clearSec = T_fixo + tWave * waves + (1/c) * (hp / partyDps)
 
     onde c e a eficiencia de kill (quanto de HP/s o time mata por unidade de
-    DPS efetivo calculado). Normalizar pelo DPS da epoca da amostra permite
-    aproveitar amostras antigas mesmo depois de o time ficar mais forte.
-    Pesos decaem com a idade (meia-vida de 14 dias).
+    DPS efetivo). Normalizar pelo DPS da epoca da amostra permite aproveitar
+    amostras antigas mesmo depois de o time ficar mais forte.
+
+    Pesos:
+      - amostra MANUAL (cronometrada pelo usuario) = W_MANUAL fixo, sem decair:
+        e a verdade-base e domina as automaticas.
+      - amostra AUTO = 0.5^(idade/14d) * min(clears,5): janelas com mais runs
+        erram menos nas pontas; amostras antigas pesam menos.
+
+    Com 5+ pontos ajusta os 3 parametros (inclui o T_fixo); com menos, ou se o
+    ajuste de 3 sair sem sentido fisico, cai pro de 2 com T_fixo fixo.
     """
     now = now or time.time()
     pts = []
     for s in samples or []:
-        if not s or s.get("clearSec", 0) <= 0 or s.get("hp", 0) <= 0:
+        if not s:
             continue
-        if s.get("partyDps", 0) <= 0:
+        cs = s.get("clearSec") or 0
+        hp_raw = s.get("hp") or 0
+        pd = s.get("partyDps") or 0
+        if cs <= 0 or hp_raw <= 0 or pd <= 0:
             continue
-        age_days = max(now - s.get("ts", now), 0) / 86400
-        # janelas com mais runs tem menos erro de borda (run parcial nas
-        # pontas), entao pesam mais; idade decai com meia-vida de 14 dias
-        w = 0.5 ** (age_days / 14) * min(s.get("clears") or 1, 5)
-        y = s["clearSec"] - T_FIXED
+        src = s.get("source")
+        if src == "manual":
+            w = W_MANUAL
+        else:
+            age_days = max(now - s.get("ts", now), 0) / 86400
+            w = 0.5 ** (age_days / 14) * min(s.get("clears") or 1, 5)
         # hp corrigido pela escala empirica atual da fase, quando disponivel
-        hp = (hp_of(s["stage"]) if hp_of else None) or s["hp"]
-        pts.append((w, s.get("waves") or 0, hp / s["partyDps"], y, s["stage"]))
-    if len(pts) < 3:
+        hp = (hp_of(s["stage"]) if hp_of else None) or hp_raw
+        pts.append((w, s.get("waves") or 0, hp / pd, cs, s["stage"], src))
+    if not pts:
         return None
 
-    def solve(points):
+    def solve2(points):
+        # 2 parametros (tWave, q=1/c) com T_fixo preso em T_FIXED
         Sxx = Sxz = Szz = Sxy = Szy = 0.0
-        for w, x, z, y, _ in points:
-            Sxx += w * x * x
-            Sxz += w * x * z
-            Szz += w * z * z
-            Sxy += w * x * y
-            Szy += w * z * y
+        for w, x, z, cs, *_ in points:
+            y = cs - T_FIXED
+            Sxx += w * x * x; Sxz += w * x * z; Szz += w * z * z
+            Sxy += w * x * y; Szy += w * z * y
         det = Sxx * Szz - Sxz * Sxz
-        t_wave = q = None
+        t = q = None
         if abs(det) > 1e-9:
-            t_wave = (Sxy * Szz - Szy * Sxz) / det
+            t = (Sxy * Szz - Szy * Sxz) / det
             q = (Sxx * Szy - Sxz * Sxy) / det
-        if q is None or q <= 1e-9 or (t_wave is not None and t_wave < 0):
-            # tWave negativo nao e fisico: refaz com tWave fixo em 0
+        if q is None or q <= 1e-9 or (t is not None and t < 0):
             if Szz <= 1e-9:
                 return None
-            q = Szy / Szz
-            t_wave = 0.0
+            q = Szy / Szz; t = 0.0
             if q <= 1e-9:
                 return None
-        return t_wave, q
+        return T_FIXED, t, q
 
-    first = solve(pts)
-    if not first:
+    def solve3(points):
+        # 3 parametros: a=T_fixo, t=tWave, q=1/c. Normal equations 3x3 (Cramer).
+        S1 = Sx = Sz = Sxx = Szz = Sxz = Sy = Sxy = Szy = 0.0
+        for w, x, z, cs, *_ in points:
+            S1 += w; Sx += w * x; Sz += w * z
+            Sxx += w * x * x; Szz += w * z * z; Sxz += w * x * z
+            Sy += w * cs; Sxy += w * x * cs; Szy += w * z * cs
+        M = [[S1, Sx, Sz], [Sx, Sxx, Sxz], [Sz, Sxz, Szz]]
+        b = [Sy, Sxy, Szy]
+
+        def det3(m):
+            return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+
+        d = det3(M)
+        if abs(d) < 1e-6:
+            return None
+        col = lambda i: [[b[r] if c == i else M[r][c] for c in range(3)] for r in range(3)]
+        a, t, q = det3(col(0)) / d, det3(col(1)) / d, det3(col(2)) / d
+        if q <= 1e-9 or t < -1e-6 or a < -3:   # sem sentido fisico: descarta
+            return None
+        return max(a, 0.0), max(t, 0.0), q
+
+    def solve1(points):
+        # so q (=1/c), com tWave e T_fixo nos defaults: ancora a eficiencia de
+        # kill num tempo real. Util com 1-2 tempos manuais (verdade-base), pra
+        # um unico tempo cronometrado ja melhorar a previsao na hora.
+        Szz = Szy = 0.0
+        for w, x, z, cs, *_ in points:
+            y = cs - T_FIXED - T_WAVE * x
+            Szz += w * z * z; Szy += w * z * y
+        if Szz <= 1e-9:
+            return None
+        q = Szy / Szz
+        return (T_FIXED, T_WAVE, q) if q > 1e-9 else None
+
+    n_manual = sum(1 for p in pts if p[5] == "manual")
+    sol3 = solve3(pts) if len(pts) >= 5 else None
+    if sol3:
+        solver, sol = solve3, sol3
+    elif len(pts) >= 3:
+        solver, sol = solve2, solve2(pts)
+    elif n_manual >= 1:                 # 1-2 tempos manuais: ancora so o c
+        solver, sol = solve1, solve1(pts)
+    else:
+        return None                     # 1-2 amostras auto: deixa o gold/h ancorar
+    if not sol:
         return None
-    t_wave, q = first
+    a, t_wave, q = sol
 
     # rejeicao de outliers: o jogo gera janelas erraticas as vezes (runs
-    # relampago, contadores estranhos); descarta residuos > 2.5x o desvio
-    # mediano e reajusta uma vez
+    # relampago, contadores estranhos); descarta residuos > 2.5x o mediano
+    # e reajusta uma vez com o mesmo solver
     if len(pts) >= 5:
-        resid = [abs((y - (t_wave * x + q * z))) for w, x, z, y, _ in pts]
+        resid = [abs(cs - (a + t_wave * x + q * z)) for w, x, z, cs, *_ in pts]
         med = sorted(resid)[len(resid) // 2] or 1e-9
         kept = [p for p, r in zip(pts, resid) if r <= 2.5 * med]
-        if len(kept) >= 3 and len(kept) < len(pts):
-            second = solve(kept)
-            if second:
-                t_wave, q = second
+        if 3 <= len(kept) < len(pts):
+            again = solver(kept) or solve2(kept)
+            if again:
+                a, t_wave, q = again
                 pts = kept
 
-    return {"tWave": round(t_wave, 2), "c": 1 / q,
-            "n": len(pts), "stages": len({p[4] for p in pts})}
+    return {"tFixed": round(a, 2), "tWave": round(t_wave, 2), "c": 1 / q,
+            "n": len(pts), "stages": len({p[4] for p in pts}),
+            "manual": sum(1 for p in pts if p[5] == "manual")}
 
 
 # ---------------------------------------------------------------------------
@@ -961,8 +1025,9 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     #  3. modelo puro (DPS teorico + constantes default)
     kill_rate = party_dps           # hp/s teorico
     t_wave = T_WAVE
+    t_fixed = T_FIXED
     calib = {"source": "modelo", "factor": 1.0, "samples": len(samples or []),
-             "tWave": T_WAVE}
+             "tWave": T_WAVE, "tFixed": T_FIXED, "manual": 0}
 
     def hp_scaled(stage_key):
         e = gd.stage_econ(stage_key)
@@ -973,9 +1038,17 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     if fit:
         kill_rate = fit["c"] * party_dps
         t_wave = fit["tWave"]
-        calib = {"source": f"regressão ({fit['n']} amostras, {fit['stages']} estágios)",
+        t_fixed = fit.get("tFixed", T_FIXED)
+        nman = fit.get("manual") or 0
+        if fit["n"] < 3:
+            src = f"ancorado em {nman} tempo(s) manual"
+        else:
+            src = f"regressão ({fit['n']} amostras, {fit['stages']} estágios"
+            src += f", {nman} manual)" if nman else ")"
+        calib = {"source": src,
                  "factor": round(fit["c"], 3), "samples": fit["n"],
-                 "tWave": fit["tWave"]}
+                 "tWave": fit["tWave"], "tFixed": fit.get("tFixed", T_FIXED),
+                 "manual": nman}
     elif mgps and mgps > 0 and cur_eff and cur_eff["gold"] > 0:
         gold_clear = cur_eff["gold"] * gold_mult + flat_per_clear(cur_eff, "Gold")
         ct_meas = gold_clear / mgps
@@ -987,7 +1060,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
                      "samples": len(samples or []), "tWave": T_WAVE}
 
     def clear_time(econ):
-        return T_FIXED + t_wave * econ["waves"] + econ["hp"] / max(kill_rate, 1.0)
+        return t_fixed + t_wave * econ["waves"] + econ["hp"] / max(kill_rate, 1.0)
 
     # exp: calibra com a taxa medida se houver
     exp_scale = 1.0

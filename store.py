@@ -27,7 +27,8 @@ class Store:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.lock = threading.Lock()
-        self.data = {"samples": [], "history": [], "stageStats": {}}
+        self.data = {"samples": [], "history": [], "stageStats": {},
+                     "manualSamples": {}}
         if self.path.exists():
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
@@ -35,6 +36,7 @@ class Store:
                     self.data["samples"] = list(loaded.get("samples") or [])
                     self.data["history"] = list(loaded.get("history") or [])
                     self.data["stageStats"] = dict(loaded.get("stageStats") or {})
+                    self.data["manualSamples"] = dict(loaded.get("manualSamples") or {})
             except (OSError, ValueError):
                 pass  # arquivo corrompido: recomeca (os dados sao re-derivaveis)
 
@@ -49,6 +51,24 @@ class Store:
     def samples(self):
         with self.lock:
             return list(self.data["samples"])
+
+    # -- amostras manuais (cronometradas pelo usuario; uma por fase) ----------
+    def add_manual_sample(self, sample: dict):
+        """Upsert: uma amostra manual por fase (a nova sobrescreve a anterior)."""
+        with self.lock:
+            self.data["manualSamples"][str(sample["stage"])] = sample
+            self._flush()
+
+    def remove_manual_sample(self, stage) -> bool:
+        with self.lock:
+            removed = self.data["manualSamples"].pop(str(stage), None) is not None
+            if removed:
+                self._flush()
+            return removed
+
+    def manual_samples(self):
+        with self.lock:
+            return list(self.data["manualSamples"].values())
 
     # -- kills/run empirico por estagio (aprendido dos contadores do save) ----
     def add_stage_obs(self, stage: int, kills_per_clear: float, clears: float):

@@ -80,7 +80,12 @@ export default function App() {
       {!st ? (
         <div className="loading">aguardando primeira leitura do save…</div>
       ) : tab === "modelo" && sim ? (
-        <ModelTab sim={sim} samples={d.samples} sampleLog={d.sampleLog} />
+        <ModelTab
+          sim={sim}
+          samples={d.samples}
+          manualSamples={d.manualSamples}
+          sampleLog={d.sampleLog}
+        />
       ) : (
         <main className="grid">
           <section className="cards-row">

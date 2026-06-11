@@ -15,7 +15,7 @@ import tbh_tracker as core
 from simulator import (GameData, StatBag, simulate, fit_clear_model,
                        fit_factor, make_clear_sample, mitigation, offline_info,
                        project_levels, rune_stats, _crit_factor,
-                       _rune_to_hero_stat, T_FIXED)
+                       _rune_to_hero_stat, T_FIXED, T_WAVE)
 
 ROOT = Path(__file__).parent
 PASS, FAIL = 0, []
@@ -91,7 +91,55 @@ def t_fit_recovery():
           f"got {fit}")
     check("regressao recupera c (±10%)",
           fit and abs(fit["c"] - true_c) / true_c < 0.10, f"got {fit}")
+    check("regressao recupera tFixed (±5s)",
+          fit and abs(fit["tFixed"] - T_FIXED) < 5, f"got {fit}")
     check("regressao exige 3+ amostras", fit_clear_model(samples[:2], now) is None)
+
+
+def t_fit_manual_weight():
+    # auto consistente com c=1.0; manual (peso alto) consistente com c=0.5.
+    # o c ajustado deve pender forte para o manual.
+    now = time.time()
+
+    def gen(c, source, n, stage0):
+        out = []
+        for i in range(n):
+            dps = 1000 + i * 200
+            waves = 6 + (i % 8)
+            hp = 40000 + i * 30000
+            s = {"ts": now, "stage": stage0 + i,
+                 "clearSec": T_FIXED + 4.0 * waves + hp / (c * dps),
+                 "hp": hp, "waves": waves, "partyDps": dps}
+            if source:
+                s["source"] = source
+            out.append(s)
+        return out
+
+    auto = gen(1.0, None, 6, 1100)
+    manual = gen(0.5, "manual", 6, 1200)
+    fit = fit_clear_model(auto + manual, now)
+    check("manual domina: c puxa forte pro manual (<0.65)",
+          fit and fit["c"] < 0.65, f"got {fit}")
+    check("manual contado no fit", fit and fit.get("manual") == 6, f"got {fit}")
+    fit_auto = fit_clear_model(auto, now)
+    check("so auto: c ~1.0", fit_auto and abs(fit_auto["c"] - 1.0) < 0.15,
+          f"got {fit_auto}")
+
+
+def t_fit_single_manual():
+    # um unico tempo manual ja ancora o c (tWave/T_fixo ficam no default)
+    now = time.time()
+    dps, waves, hp, c = 2000.0, 10, 200000.0, 0.7
+    clear = T_FIXED + T_WAVE * waves + hp / (c * dps)
+    s = {"ts": now, "stage": 2109, "clearSec": clear, "hp": hp,
+         "waves": waves, "partyDps": dps, "source": "manual"}
+    fit = fit_clear_model([s], now)
+    check("1 tempo manual ancora c", fit and abs(fit["c"] - c) < 0.02, f"got {fit}")
+    check("1 manual: tWave/tFixo nos defaults",
+          fit and fit["tWave"] == T_WAVE and fit["tFixed"] == T_FIXED, f"got {fit}")
+    s_auto = {k: v for k, v in s.items() if k != "source"}
+    check("1 amostra auto nao ancora (deixa gold/h)",
+          fit_clear_model([s_auto], now) is None)
 
 
 # ---------------------------------------------------------------- jogo real
@@ -166,6 +214,13 @@ def t_sample_derivation(gd, save):
     s5, keep5, _ = make_clear_sample(gd, save, anchor5, cur3, 2000)
     check("amostra: estagio diferente -> re-ancora",
           s5 is None and keep5 is False)
+    # relogio por playTime: 90s de playTime / 3 clears = 30s (lastSavedTime nao muda)
+    a_pt = dict(anchor3, playTime=1000, lastSavedTime=0)
+    c_pt = dict(cur, playTime=1090, lastSavedTime=0, gold=0, totalClears=103,
+                totalKills=50000 + round(3 * kills))
+    s_pt, _, _ = make_clear_sample(gd, save, a_pt, c_pt, 2000)
+    check("amostra: dt usa playTime (90s/3 = 30s)",
+          s_pt and abs(s_pt["clearSec"] - 30) < 0.5, f"got {s_pt}")
 
 
 def t_econ_scale(gd, save):
@@ -241,6 +296,8 @@ if __name__ == "__main__":
     t_mitigation()
     t_rune_mapping()
     t_fit_recovery()
+    t_fit_manual_weight()
+    t_fit_single_manual()
     t_fit_factor()
     gd = GameData(ROOT / "gamedata")
     save = t_real_save(gd)

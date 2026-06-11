@@ -78,6 +78,13 @@ clearSec = T_fixo + tWave·waves + HP / (c · DPS_do_time)
 Sem amostras, o modelo ancora no gold/h medido da sessão; sem nada, usa o
 modelo puro. A fonte da calibração aparece no painel.
 
+Na aba **Modelo** você também pode **cronometrar uma run e digitar o tempo em
+segundos** ("Calibrar tempo de clear"): vale como verdade-base de **peso alto**
+e **um único tempo já ancora** a eficiência de kill — não depende da contagem
+de kills nem do HP da wiki. Com 5+ amostras a regressão passa a ajustar também
+o overhead fixo (`T_fixo`), e o relógio usa o `playTime` (ignora tempo de jogo
+fechado).
+
 ### O que o painel entrega
 
 - **Coach em texto** — melhor fase de gold, custo por hora da fase errada,

@@ -13,7 +13,7 @@ Uso:
     python fetch_gamedata.py              # uma vez, baixa dados do jogo
     python server.py                      # http://127.0.0.1:8423
     python server.py --port 9000
-    python server.py --save C:\caminho\SaveFile_Live.es3
+    python server.py --save C:\\caminho\\SaveFile_Live.es3
 
 Tudo continua 100% passivo: o save original nunca e aberto em escrita.
 """
@@ -27,6 +27,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import tbh_tracker as core
 from simulator import GameData, simulate, make_clear_sample
@@ -38,6 +39,11 @@ DIST_DIR = ROOT / "frontend" / "dist"
 GAMEDATA_DIR = ROOT / "gamedata"
 STORE_PATH = ROOT / "data" / "store.json"
 HISTORY_MAX = 1000  # pontos de historico devolvidos pela API
+
+
+class CalibrationIn(BaseModel):
+    stage: int          # chave do estagio (ex.: 2109)
+    clearSec: float     # tempo de uma run EM SEGUNDOS (cronometrado)
 
 
 class SaveWatcher:
@@ -151,7 +157,7 @@ class SaveWatcher:
         if self.gamedata:
             try:
                 sim = simulate(self.gamedata, inner, measured,
-                               samples=self.store.samples(),
+                               samples=self._all_samples(),
                                stage_stats=self.store.stage_stats())
             except Exception as e:
                 sim_error = f"simulador falhou: {e}"
@@ -205,6 +211,31 @@ class SaveWatcher:
             if len(self.sample_log) > 50:
                 self.sample_log = self.sample_log[-50:]
 
+    # -- amostras (auto + manual) e re-simulacao sob demanda -----------------
+    def _all_samples(self):
+        return self.store.samples() + self.store.manual_samples()
+
+    def resimulate(self):
+        """Re-roda a simulacao com as amostras atuais, sem esperar o proximo
+        save. Usado apos calibracao manual para o painel refletir na hora."""
+        if not self.gamedata:
+            return
+        try:
+            inner = core.safe_copy_and_decrypt(self.save_path)
+        except (ValueError, OSError):
+            return
+        with self.lock:
+            measured = self._measured()
+        try:
+            sim = simulate(self.gamedata, inner, measured,
+                           samples=self._all_samples(),
+                           stage_stats=self.store.stage_stats())
+            with self.lock:
+                self.sim, self.sim_error = sim, None
+        except Exception as e:
+            with self.lock:
+                self.sim_error = f"simulador falhou: {e}"
+
     # -- snapshot para a API -------------------------------------------------
     def snapshot(self):
         with self.lock:
@@ -224,6 +255,7 @@ class SaveWatcher:
                 "sim": self.sim,
                 "history": self.store.history()[-HISTORY_MAX:],
                 "samples": self.store.samples()[-50:],
+                "manualSamples": self.store.manual_samples(),
                 "sampleLog": self.sample_log[-20:],
             }
 
@@ -234,6 +266,35 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
     @app.get("/api/snapshot")
     def api_snapshot():
         return watcher.snapshot()
+
+    @app.post("/api/calibration")
+    def add_calibration(body: CalibrationIn):
+        """Grava o tempo (em segundos) cronometrado pelo usuario para a fase,
+        anexando o DPS/HP/waves do momento. Vira amostra manual (peso alto)."""
+        econ = watcher.gamedata.stage_econ(body.stage) if watcher.gamedata else None
+        with watcher.lock:
+            sim = watcher.sim
+        party_dps = ((sim or {}).get("party") or {}).get("dps")
+        sample = {
+            "ts": time.time(), "stage": body.stage,
+            "clearSec": round(float(body.clearSec), 2),
+            "clears": 1, "method": "manual", "source": "manual",
+            "partyDps": round(party_dps, 1) if party_dps else None,
+            "hp": econ["hp"] if econ else None,
+            "waves": econ["waves"] if econ else None,
+            "lvl": econ["lvl"] if econ else None,
+        }
+        watcher.store.add_manual_sample(sample)
+        watcher.resimulate()
+        # usable=False avisa o painel que a amostra so entra no ajuste quando
+        # houver DPS lido (servidor precisa ter lido o save com o time montado)
+        return {"ok": True, "usable": bool(party_dps and econ), "sample": sample}
+
+    @app.delete("/api/calibration/{stage}")
+    def del_calibration(stage: int):
+        removed = watcher.store.remove_manual_sample(stage)
+        watcher.resimulate()
+        return {"ok": True, "removed": removed}
 
     # serve o frontend buildado (frontend/dist); cai para o web/ legado
     static_dir = DIST_DIR if (DIST_DIR / "index.html").exists() else WEB_DIR

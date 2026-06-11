@@ -9,9 +9,15 @@ export function fmt(n) {
 
 export function fmtDur(sec) {
   if (sec === null || sec === undefined) return "—";
-  if (sec < 90) return Math.round(sec) + "s";
-  if (sec < 5400) return Math.round(sec / 60) + "min";
-  return (sec / 3600).toFixed(1) + "h";
+  sec = Math.round(sec);
+  // preciso ao segundo: 200s mostra "3m20s", nunca "3min" (que esconde os 20s)
+  if (sec < 90) return sec + "s";
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return s ? `${m}m${s}s` : `${m}m`;
+  }
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return m ? `${h}h${m}m` : `${h}h`;
 }
 
 export function fmtHours(h) {
