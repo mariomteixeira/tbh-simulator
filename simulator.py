@@ -779,16 +779,40 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
 # ---------------------------------------------------------------------------
 # Penalidade de exp por over-level
 # ---------------------------------------------------------------------------
-def fit_factor(party_level: int, stage_lvl: int) -> float:
-    """Penalidade de exp quando o time esta acima do nivel da fase.
+# EXP mantida por nivel, lida direto da tela do jogo (heroi Lv41), em funcao de
+# delta = nivel_da_fase - nivel_do_heroi. Curva ASSIMETRICA: queda forte quando
+# a fase fica abaixo do time (out-level), plato 100% em delta [-2, +6], e queda
+# leve quando a fase fica bem acima. So temos a faixa do Lv41; assume-se que a
+# curva desliza com o nivel (depende so de delta) ate haver mais dados.
+_EXP_KEEP_KNOTS = [
+    (-16, 0.05), (-12, 0.16), (-8, 0.50), (-5, 0.88),
+    (-3, 0.99), (-2, 1.00), (6, 1.00), (10, 0.85),
+]
 
-    [estimativa] Curva logistica centrada 8 niveis acima da fase, inclinacao
-    2/3 por nivel: ~100% ate o nivel da fase, ~50% a +8 niveis, ~5% a +12.
-    Constantes empiricas ajustadas contra taxas de exp observadas (origem:
-    projeto de referencia tbh-copilot, validacao 2026-06); a calibracao com
-    o exp/h medido ancora a escala absoluta no estagio atual de toda forma.
+
+def fit_factor(party_level: int, stage_lvl: int) -> float:
+    """Fracao de EXP mantida numa fase, dado o over/under-level do time.
+
+    Interpola linearmente a curva empirica do jogo em delta = stage_lvl -
+    party_level. Fora dos nos extrapola pela inclinacao da ponta, com pisos
+    conservadores (0.02 embaixo, 0.30 em cima). A calibracao por exp/h medido
+    ancora a escala absoluta no estagio atual de toda forma.
     """
-    return min(1.0, max(0.01, 1 / (1 + math.exp((party_level - stage_lvl - 8) * (2 / 3)))))
+    d = stage_lvl - party_level
+    ks = _EXP_KEEP_KNOTS
+    if d <= ks[0][0]:                                   # tail baixo (out-level extremo)
+        (d0, v0), (d1, v1) = ks[0], ks[1]
+        slope = (v1 - v0) / (d1 - d0)
+        return max(0.02, min(1.0, v0 + slope * (d - d0)))
+    if d >= ks[-1][0]:                                  # tail alto (fase muito acima)
+        (d0, v0), (d1, v1) = ks[-2], ks[-1]
+        slope = (v1 - v0) / (d1 - d0)
+        return max(0.30, min(1.0, v1 + slope * (d - ks[-1][0])))
+    for (d0, v0), (d1, v1) in zip(ks, ks[1:]):          # interpolacao entre nos
+        if d0 <= d <= d1:
+            t = (d - d0) / (d1 - d0)
+            return max(0.01, min(1.0, v0 + t * (v1 - v0)))
+    return 1.0  # inalcancavel (plato cobre o miolo)
 
 
 # ---------------------------------------------------------------------------

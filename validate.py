@@ -183,9 +183,15 @@ def t_econ_scale(gd, save):
 
 
 def t_fit_factor():
-    check("fit: sem penalidade abaixo do nivel da fase", fit_factor(30, 40) > 0.99)
-    check("fit: ~50% a +8 niveis", abs(fit_factor(48, 40) - 0.5) < 0.01)
-    check("fit: despenca a +14 niveis", fit_factor(54, 40) < 0.05)
+    # curva real medida no jogo (heroi Lv41), delta = nivel_da_fase - nivel_do_heroi:
+    # plato 100% em delta [-2,+6]; queda forte abaixo (out-level); queda leve acima.
+    check("fit: plato 100% no nivel da fase", abs(fit_factor(41, 41) - 1.0) < 1e-9)
+    check("fit: plato cobre ate +6 acima", abs(fit_factor(41, 47) - 1.0) < 1e-9)
+    check("fit: ~88% a -5 (fase 5 abaixo)", abs(fit_factor(41, 36) - 0.88) < 0.02)
+    check("fit: ~50% a -8", abs(fit_factor(48, 40) - 0.50) < 0.02)
+    check("fit: ~16% a -12", abs(fit_factor(41, 29) - 0.16) < 0.02)
+    check("fit: ~5% a -16", abs(fit_factor(41, 25) - 0.05) < 0.02)
+    check("fit: pune lado alto, ~85% a +10", abs(fit_factor(41, 51) - 0.85) < 0.02)
 
 
 def t_projection(gd):
