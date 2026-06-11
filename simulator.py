@@ -1107,9 +1107,12 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         r["rating"] = ("seguro" if rel <= 1.2 else
                        "apertado" if rel <= 2.5 else "arriscado")
 
-    # ACTBOSS nao e farmavel em loop; fica na tabela mas fora da recomendacao
+    # Recomendacao so entre fases que voce CONSEGUE clearar: nao-ACTBOSS, ja
+    # LIMPAS (a fase seguinte nao-limpa vira "push", nunca recomendacao de farm)
+    # e de preferencia nao "arriscado". Fallbacks pra nunca ficar sem nada.
     farmable = [r for r in rows if r["type"] != "ACTBOSS"]
-    pool = ([r for r in farmable if r["rating"] != "arriscado"] or farmable)
+    cleared_farm = [r for r in farmable if r["cleared"]] or farmable
+    pool = [r for r in cleared_farm if r["rating"] != "arriscado"] or cleared_farm
     best_gold = max(pool, key=lambda r: r["goldPerHour"], default=None)
     best_exp = max(pool, key=lambda r: r["expPerHour"], default=None)
     push = next((r for r in rows if not r["cleared"]), None)
