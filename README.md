@@ -24,6 +24,7 @@ jogo, que gear trocar e quando cada herói sobe de nível.
 | `fetch_gamedata.py` | Baixa as tabelas do jogo de `taskbarhero.wiki/data/` para `gamedata/`. |
 | `frontend/` | Painel em React + Vite; o build vai para `frontend/dist`. |
 | `validate.py` | Suite de validações (fórmulas, regressão, amostras, API). |
+| `tbh_painel.pyw` / `criar_atalho.ps1` | Mini-janela de controle (Iniciar/Parar + status ao vivo) e o gerador do atalho na Área de Trabalho. |
 | `reference/` | Clone do tbh-copilot **apenas para comparação** — nada do app depende dele. |
 
 ## Instalação e uso
@@ -36,6 +37,12 @@ cd frontend && npm install && npm run build && cd ..   # uma vez
 
 python server.py                    # abre http://127.0.0.1:8423
 ```
+
+**Atalho fácil (Windows):** rode uma vez
+`powershell -ExecutionPolicy Bypass -File criar_atalho.ps1` pra criar o atalho
+**TBH Copilot** na Área de Trabalho. Ele abre o `tbh_painel.pyw` — uma
+mini-janela com **Iniciar/Parar** e status ao vivo, que sobe o servidor e abre
+o painel sem precisar de terminal.
 
 Opções: `--save <caminho>`, `--port`, `--interval`, `--debounce`.
 Validações: `python validate.py`.
