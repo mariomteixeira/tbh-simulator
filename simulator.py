@@ -1063,6 +1063,19 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         if model_eps > 0:
             exp_scale = meps / model_eps
 
+    # --- drop de baus: bau normal cai por KILL de monstro; bau do boss (azul)
+    # por kill do boss (1/run). Taxa do gamedata (per-mille) x bonus do save.
+    DROP_DIV = 1000.0   # taxas parecem per-mille; o RANKING independe da unidade
+    drop_n = 1 + runes.get("DropChanceNormalChestPercent", 0) / PCT
+    drop_b = 1 + runes.get("DropChanceStageBossChestPercent", 0) / PCT
+
+    def box_label(k):
+        if not k:
+            return None
+        tipo = {91: "Baú normal", 92: "Baú do boss", 93: "Baú act-boss"}.get(
+            k // 10000, "Baú")
+        return f"{tipo} Lv{(k % 1000) // 10}"
+
     # --- tabela de farm dos estagios desbloqueados
     party_ehp_min = min((h["ehp"] for h in heroes), default=0)
     unlocked = set(gd.unlocked_stages(cs.get("maxCompletedStage")))
@@ -1081,6 +1094,10 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         danger = (in_dps * ct) / max(party_ehp_min, 1.0)
         idx = gd.stage_order.index(key)
         fit = fit_factor(party_level, econ["lvl"])
+        st = gd.stages.get(key) or {}
+        mbk, bbk = st.get("MonsterDropItemKey"), st.get("BossDropItemKey")
+        nbox = econ["nNormal"] * (st.get("MonsterDropItemRate") or 0) / DROP_DIV * drop_n
+        bbox = econ["nStageBoss"] * (st.get("BossDropItemRate") or 0) / DROP_DIV * drop_b
         rows.append({
             "key": key, "label": econ["label"], "tag": econ["tag"],
             "diff": econ["diff"], "type": econ["type"], "name": econ["name"],
@@ -1094,6 +1111,13 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "econScale": round(scale_of(key), 3),
             "measuredScale": key in scales,
             "danger": round(danger, 2),
+            "normalBox": box_label(mbk),
+            "bossBox": box_label(bbk),
+            "normalBoxLvl": (mbk % 1000) // 10 if mbk else 0,
+            "bossBoxLvl": (bbk % 1000) // 10 if bbk else 0,
+            "normalBoxPerHour": nbox / ct * 3600,
+            "bossBoxPerHour": bbox / ct * 3600,
+            "secsPerBossBox": (ct / bbox) if bbox > 0 else None,
             "cleared": idx <= max_idx,
             "current": key == cur_key,
         })
@@ -1121,6 +1145,16 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     push = next((r for r in rows if not r["cleared"]), None)
     if push and push.get("rating") != "seguro":
         push = None
+
+    # rota de baus: melhor fase LIMPA para cada tipo. Prioriza o bau de NIVEL
+    # MAIS ALTO que voce consegue farmar (gear melhor) e, dentro do mesmo nivel,
+    # o que rende mais por hora (clear mais rapido). Senao recomendaria 1-1, que
+    # clera num piscar mas so dropa bau Lv1 inutil.
+    box_pool = [r for r in rows if r["cleared"] and r["type"] != "ACTBOSS"]
+    best_boss_box = max((r for r in box_pool if r["bossBoxPerHour"] > 0),
+                        key=lambda r: (r["bossBoxLvl"], r["bossBoxPerHour"]), default=None)
+    best_normal_box = max((r for r in box_pool if r["normalBoxPerHour"] > 0),
+                          key=lambda r: (r["normalBoxLvl"], r["normalBoxPerHour"]), default=None)
 
     # --- exp/s por heroi: medido se houver, senao estimado pela fase atual
     eps_party = (meps if meps and meps > 0 else
@@ -1164,7 +1198,10 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "goldBonusPct": round((gold_mult - 1) * 100),
         "expBonusPct": round((exp_mult - 1) * 100),
         "farm": {"rows": rows, "current": cur_row, "bestGold": best_gold,
-                 "bestExp": best_exp, "push": push},
+                 "bestExp": best_exp, "push": push,
+                 "bestBossBox": best_boss_box, "bestNormalBox": best_normal_box,
+                 "dropBonus": {"normal": round((drop_n - 1) * 100),
+                               "boss": round((drop_b - 1) * 100)}},
         "levelEta": eta,
         "projection": projection,
         "offline": offline,

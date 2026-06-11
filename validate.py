@@ -156,6 +156,9 @@ def t_real_save(gd):
           r["farm"]["bestGold"]["cleared"] and r["farm"]["bestExp"]["cleared"])
     check("simulate: push so se 'seguro' (ou None)",
           r["farm"]["push"] is None or r["farm"]["push"]["rating"] == "seguro")
+    bb = r["farm"]["bestBossBox"]
+    check("simulate: rota de bau do boss e fase LIMPA com perHour>0",
+          bb and bb["cleared"] and bb["bossBoxPerHour"] > 0 and bb["bossBox"])
     check("simulate: coach tem texto", len(r["coach"]) >= 3)
     check("simulate: offline park so em fase limpa",
           r["offline"]["park"] is None or any(

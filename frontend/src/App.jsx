@@ -11,6 +11,7 @@ import OfflinePanel from "./components/OfflinePanel.jsx";
 import GoldChart from "./components/GoldChart.jsx";
 import ProjectionChart from "./components/ProjectionChart.jsx";
 import ModelPanel from "./components/ModelPanel.jsx";
+import BoxPanel from "./components/BoxPanel.jsx";
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -126,6 +127,7 @@ export default function App() {
           <aside className="col-side">
             {sim && <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />}
             {sim?.offline && <OfflinePanel offline={sim.offline} />}
+            {sim?.farm && <BoxPanel farm={sim.farm} />}
             {sim?.gear && <GearPanel gear={sim.gear} />}
             {sim && <ModelPanel calibration={sim.calibration} samples={d.samples} />}
           </aside>
