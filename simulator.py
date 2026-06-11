@@ -850,40 +850,28 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
 # ---------------------------------------------------------------------------
 # Penalidade de exp por over-level
 # ---------------------------------------------------------------------------
-# EXP mantida por nivel, lida direto da tela do jogo (heroi Lv41), em funcao de
-# delta = nivel_da_fase - nivel_do_heroi. Curva ASSIMETRICA: queda forte quando
-# a fase fica abaixo do time (out-level), plato 100% em delta [-2, +6], e queda
-# leve quando a fase fica bem acima. So temos a faixa do Lv41; assume-se que a
-# curva desliza com o nivel (depende so de delta) ate haver mais dados.
-_EXP_KEEP_KNOTS = [
-    (-16, 0.05), (-12, 0.16), (-8, 0.50), (-5, 0.88),
-    (-3, 0.99), (-2, 1.00), (6, 1.00), (10, 0.85),
-]
-
-
 def fit_factor(party_level: int, stage_lvl: int) -> float:
     """Fracao de EXP mantida numa fase, dado o over/under-level do time.
 
-    Interpola linearmente a curva empirica do jogo em delta = stage_lvl -
-    party_level. Fora dos nos extrapola pela inclinacao da ponta, com pisos
-    conservadores (0.02 embaixo, 0.30 em cima). A calibracao por exp/h medido
-    ancora a escala absoluta no estagio atual de toda forma.
+    Formula EXATA do jogo, recuperada do Farming Planner da taskbarhero.wiki
+    (funcao `Ht`); reproduz ao certo a tabela lida na tela do jogo (no Lv41:
+    plato 100% em 39-47, 50% a -8, 16% a -12, 5% a -16, 85% a +10). O plato e
+    DEPENDENTE DO NIVEL: alarga com log(nivel). Assimetrica: queda mais forte
+    quando a fase fica abaixo do time (out-level) que quando fica acima.
     """
-    d = stage_lvl - party_level
-    ks = _EXP_KEEP_KNOTS
-    if d <= ks[0][0]:                                   # tail baixo (out-level extremo)
-        (d0, v0), (d1, v1) = ks[0], ks[1]
-        slope = (v1 - v0) / (d1 - d0)
-        return max(0.02, min(1.0, v0 + slope * (d - d0)))
-    if d >= ks[-1][0]:                                  # tail alto (fase muito acima)
-        (d0, v0), (d1, v1) = ks[-2], ks[-1]
-        slope = (v1 - v0) / (d1 - d0)
-        return max(0.30, min(1.0, v1 + slope * (d - ks[-1][0])))
-    for (d0, v0), (d1, v1) in zip(ks, ks[1:]):          # interpolacao entre nos
-        if d0 <= d <= d1:
-            t = (d - d0) / (d1 - d0)
-            return max(0.01, min(1.0, v0 + t * (v1 - v0)))
-    return 1.0  # inalcancavel (plato cobre o miolo)
+    e, t = party_level, stage_lvl
+    over = e >= t                       # time no nivel ou acima da fase (out-level)
+    r = 0.5 if over else 0.4            # piso da zona de queda quadratica
+    k = math.log(e + 1) / 10 + 1        # escala que cresce com o nivel
+    a = math.trunc(k * (2 if over else 5))   # meia-largura do plato
+    o = math.trunc(k * (5 if over else 6))   # largura da queda quadratica
+    s = abs(e - t)
+    if s <= a:
+        return 1.0                      # plato: EXP cheia
+    if s <= a + o:
+        x = (s - a) / o                 # queda quadratica suave ate o piso r
+        return max(1 - (1 - r) * x * x, 0.01)
+    return max((0.01 / r) ** ((s - a - o) / max(e / 3, 1)) * r, 0.01)  # cauda exp
 
 
 # ---------------------------------------------------------------------------
@@ -951,26 +939,19 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     """
     measured = measured or {}
 
-    # --- escala empirica da economia por fase: observado / wiki.
-    # Fases sem medicao usam a mediana das medidas (a inflacao da wiki e
-    # parecida entre fases vizinhas; melhor mediana que assumir 1.0).
+    # --- economia: HP/gold/exp dataminados CRUS, igual ao Farming Planner da
+    # taskbarhero.wiki (que mostra numeros exatos: reward / tempo-de-clear).
+    # O antigo "econScale" (observado/wiki via kills) foi REMOVIDO: ele saia do
+    # totalClears do save, que conta varias vezes por run, e corrompia a razao
+    # (puxava gold/exp pra baixo). O tempo de clear vem da calibracao manual.
     scales = {}
-    for k, v in (stage_stats or {}).items():
-        e = gd.stage_econ(int(k))
-        if e and e["kills"] > 0 and v.get("kpc"):
-            scales[int(k)] = max(0.1, min(2.0, v["kpc"] / e["kills"]))
-    _sv = sorted(scales.values())
-    global_scale = _sv[len(_sv) // 2] if _sv else 1.0
+    global_scale = 1.0
 
     def scale_of(key):
-        return scales.get(key, global_scale)
+        return 1.0
 
     def eff_econ(econ):
-        s = scale_of(econ["key"])
-        out = dict(econ)
-        for f in ("hp", "gold", "exp", "kills", "nNormal"):
-            out[f] = econ[f] * s
-        return out
+        return econ
     cs = save["commonSaveData"]
     runes = rune_stats(gd, save)
 

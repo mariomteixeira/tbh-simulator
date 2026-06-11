@@ -224,17 +224,14 @@ def t_sample_derivation(gd, save):
 
 
 def t_econ_scale(gd, save):
+    # econScale REMOVIDO: usa reward dataminado cru (igual a wiki), ignora kpc
     econ = gd.stage_econ(2109)
-    half_kpc = econ["kills"] / 2
-    r = simulate(gd, save, stage_stats={"2109": {"kpc": half_kpc, "n": 3}})
+    r = simulate(gd, save, stage_stats={"2109": {"kpc": econ["kills"] / 2, "n": 3}})
     row = next((x for x in r["farm"]["rows"] if x["key"] == 2109), None)
-    check("escala: fase medida usa observado/wiki (~0.5)",
-          row and abs(row["econScale"] - 0.5) < 0.01, f"got {row and row['econScale']}")
-    check("escala: global = mediana das medidas",
-          abs(r["econScale"]["global"] - 0.5) < 0.01, f"got {r['econScale']}")
-    other = next((x for x in r["farm"]["rows"] if x["key"] != 2109), None)
-    check("escala: fase sem medida herda a global",
-          other and abs(other["econScale"] - 0.5) < 0.01)
+    check("econ: sem correcao por kills (scale=1.0)",
+          row and abs(row["econScale"] - 1.0) < 1e-9, f"got {row and row['econScale']}")
+    check("econ: global = 1.0 (reward cru)",
+          abs(r["econScale"]["global"] - 1.0) < 1e-9, f"got {r.get('econScale')}")
 
 
 def t_fit_factor():
