@@ -38,7 +38,8 @@ import time
 from pathlib import Path
 
 PCT = 1000.0          # divisor per-mille usado pelo jogo
-STAGE_MULT_DIV = 100.0
+STAGE_MULT_DIV = 1000.0   # multiplicadores de nivel da fase sao per-mille (NAO /100):
+                          # validado contra o expectedGold/HP/EXP da wiki (era 10x off)
 
 # Multiplicador do ataque basico. Validado empiricamente contra o painel de
 # Status do jogo: AD * AS * critF * 1.9 reproduziu o DPS exibido com erro
