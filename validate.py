@@ -154,6 +154,8 @@ def t_real_save(gd):
           r["farm"]["bestGold"]["type"] != "ACTBOSS")
     check("simulate: recomendacao so em fase LIMPA (nao a seguinte/travada)",
           r["farm"]["bestGold"]["cleared"] and r["farm"]["bestExp"]["cleared"])
+    check("simulate: push so se 'seguro' (ou None)",
+          r["farm"]["push"] is None or r["farm"]["push"]["rating"] == "seguro")
     check("simulate: coach tem texto", len(r["coach"]) >= 3)
     check("simulate: offline park so em fase limpa",
           r["offline"]["park"] is None or any(

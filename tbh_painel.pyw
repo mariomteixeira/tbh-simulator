@@ -53,14 +53,17 @@ def fmt(n):
 
 
 def _age(ts, now):
+    # mesmos limiares/arredondamento do painel web (timeAgo) p/ nao divergir
     if not ts:
         return "—"
     d = max(0, int(now - ts))
-    if d < 90:
+    if d < 5:
+        return "agora"
+    if d < 60:
         return f"há {d}s"
-    if d < 5400:
+    if d < 3600:
         return f"há {d // 60}min"
-    return f"há {d // 3600}h"
+    return f"há {d / 3600:.1f}h"
 
 
 def render_info(snap, now):

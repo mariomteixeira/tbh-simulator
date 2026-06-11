@@ -19,6 +19,9 @@ export default function FarmTable({ farm }) {
   const rows = useMemo(() => {
     // runs de boss de ato nao sao farmaveis em loop: fora da tabela
     let r = (farm.rows || []).filter((x) => x.type !== "ACTBOSS");
+    // por padrao so fases que voce CONSEGUE clearar (limpas) + o push (se houver);
+    // "ver todas" libera as nao-limpas pra referencia
+    if (!all) r = r.filter((x) => x.cleared || x.key === farm.push?.key);
     if (diff !== "todas") r = r.filter((x) => x.tag === diff);
     r.sort((a, b) => {
       const va = a[sort.key], vb = b[sort.key];

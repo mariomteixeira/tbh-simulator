@@ -1115,7 +1115,12 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     pool = [r for r in cleared_farm if r["rating"] != "arriscado"] or cleared_farm
     best_gold = max(pool, key=lambda r: r["goldPerHour"], default=None)
     best_exp = max(pool, key=lambda r: r["expPerHour"], default=None)
+    # "push" = proxima fase nao-limpa, mas SO sugere se da pra clearar com folga
+    # (rating "seguro"). Se a proxima esta "apertado"/"arriscado", o jogador nao
+    # esta pronto: nao empurra (evita sugerir fase em que ele esta travado).
     push = next((r for r in rows if not r["cleared"]), None)
+    if push and push.get("rating") != "seguro":
+        push = None
 
     # --- exp/s por heroi: medido se houver, senao estimado pela fase atual
     eps_party = (meps if meps and meps > 0 else

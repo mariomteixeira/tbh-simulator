@@ -30,6 +30,6 @@ export function timeAgo(epoch) {
   const s = Math.round(Date.now() / 1000 - epoch);
   if (s < 5) return "agora";
   if (s < 60) return s + "s atrás";
-  if (s < 3600) return Math.round(s / 60) + "min atrás";
+  if (s < 3600) return Math.floor(s / 60) + "min atrás";  // floor, igual ao launcher
   return (s / 3600).toFixed(1) + "h atrás";
 }
