@@ -10,7 +10,6 @@ import DamagePanel from "./components/DamagePanel.jsx";
 import OfflinePanel from "./components/OfflinePanel.jsx";
 import GoldChart from "./components/GoldChart.jsx";
 import ProjectionChart from "./components/ProjectionChart.jsx";
-import ModelPanel from "./components/ModelPanel.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 
 function StatCard({ label, value, sub, accent }) {
@@ -88,7 +87,7 @@ export default function App() {
           sampleLog={d.sampleLog}
         />
       ) : (
-        <main className="grid">
+        <main className="dash">
           <section className="cards-row">
             <StatCard label="Gold" value={fmt(st.gold)} sub={goldRate} accent="gold" />
             <StatCard
@@ -112,25 +111,24 @@ export default function App() {
             />
           </section>
 
-          <section className="col-main">
-            {sim?.coach && <Coach paragraphs={sim.coach} />}
-            {sim && <FarmTable farm={sim.farm} />}
-            {sim?.heroes?.length > 0 && <DamagePanel heroes={sim.heroes} />}
-            <div className="charts-row">
-              <GoldChart history={d.history} />
-              {sim?.projection?.length > 0 && (
-                <ProjectionChart projection={sim.projection} />
-              )}
-            </div>
+          {sim?.coach && <Coach paragraphs={sim.coach} />}
+          {sim && <FarmTable farm={sim.farm} />}
+          {sim?.farm && <BoxPanel farm={sim.farm} />}
+
+          <div className="charts-row">
+            <GoldChart history={d.history} />
+            {sim?.projection?.length > 0 && (
+              <ProjectionChart projection={sim.projection} />
+            )}
+          </div>
+
+          <section className="panel-grid">
+            {sim && <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />}
+            {sim?.gear && <GearPanel gear={sim.gear} />}
+            {sim?.offline && <OfflinePanel offline={sim.offline} />}
           </section>
 
-          <aside className="col-side">
-            {sim && <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />}
-            {sim?.offline && <OfflinePanel offline={sim.offline} />}
-            {sim?.farm && <BoxPanel farm={sim.farm} />}
-            {sim?.gear && <GearPanel gear={sim.gear} />}
-            {sim && <ModelPanel calibration={sim.calibration} samples={d.samples} />}
-          </aside>
+          {sim?.heroes?.length > 0 && <DamagePanel heroes={sim.heroes} />}
         </main>
       )}
 
