@@ -521,12 +521,31 @@ button.link:hover { color: var(--color-blood); }
   line-height: 1; padding: 2px 3px; border-radius: 4px;
   background: #0a0d14; border: 1px solid var(--color-edge-2); color: var(--color-dim);
 }
-.rt-star {
-  position: absolute; top: -9px; right: -7px; font-size: .8rem;
-  color: var(--color-gold); text-shadow: 0 0 9px rgba(245, 177, 61, .9);
-  animation: starPulse 1.6s ease-in-out infinite;
+/* ranking 1º/2º/3º no mapa: 1º pisca, 2º/3º brilham menos */
+.rt-rank {
+  position: absolute; top: -10px; left: -9px;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  line-height: 1; padding: 2px 4px; border-radius: 99px;
+  border: 1px solid; background: #0a0d14;
 }
-@keyframes starPulse { 50% { transform: scale(1.25); } }
+.rt-rank.rr-c { color: #6fd2ff; border-color: #2e7fb5; }
+.rt-rank.rr-f { color: var(--color-gold); border-color: #8a6620; }
+.rune-tile.rk { opacity: 1; }
+.rune-tile.rk img { filter: none; }
+.rune-tile.rk-c1 { animation: blinkBlue 1s ease-in-out infinite; border-color: #6fd2ff; }
+@keyframes blinkBlue {
+  0%, 100% { border-color: #4f9cf0; box-shadow: 0 0 0 2px rgba(79, 156, 240, .6), 0 0 22px rgba(79, 156, 240, .8); }
+  50%      { border-color: #ffffff; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 0 30px rgba(190, 225, 255, .95); }
+}
+.rune-tile.rk-c2 { border-color: #4f9cf0; box-shadow: 0 0 0 1px rgba(79, 156, 240, .45), 0 0 14px rgba(79, 156, 240, .5); }
+.rune-tile.rk-c3 { border-color: #3a6da8; box-shadow: 0 0 8px rgba(79, 156, 240, .35); }
+.rune-tile.rk-f1 { animation: blinkGold 1s ease-in-out infinite; border-color: var(--color-gold); }
+@keyframes blinkGold {
+  0%, 100% { border-color: var(--color-gold); box-shadow: 0 0 0 2px rgba(245, 177, 61, .6), 0 0 22px rgba(245, 177, 61, .8); }
+  50%      { border-color: #ffffff; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 0 30px rgba(255, 236, 200, .95); }
+}
+.rune-tile.rk-f2 { border-color: var(--color-gold); box-shadow: 0 0 0 1px rgba(245, 177, 61, .45), 0 0 14px rgba(245, 177, 61, .5); }
+.rune-tile.rk-f3 { border-color: #8a6620; box-shadow: 0 0 8px rgba(245, 177, 61, .35); }
 .rt-need {
   position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
   font-family: var(--font-mono); font-size: 8.5px; font-weight: 700;
@@ -585,8 +604,22 @@ button.link:hover { color: var(--color-blood); }
   stroke-dasharray: 10 5;
 }
 @keyframes pathDash { to { stroke-dashoffset: -15; } }
-.lg.afford { background: var(--color-cyan); box-shadow: 0 0 7px rgba(56,217,207,.9); }
 .lg.path { background: #d65bff; }
+.lg.rank-c { background: #4f9cf0; animation: blinkLg 1s ease-in-out infinite; }
+.lg.rank-f { background: var(--color-gold); animation: blinkLg 1s ease-in-out infinite; }
+@keyframes blinkLg { 50% { background: #fff; } }
+
+/* rank nas listas do rail */
+.rec-rank {
+  flex: none; font-family: var(--font-mono); font-size: .68rem; font-weight: 700;
+  padding: 2px 5px; border-radius: 99px; border: 1px solid;
+}
+.rec-rank.rr-c { color: #6fd2ff; border-color: #2e7fb5; }
+.rec-rank.rr-f { color: var(--color-gold); border-color: #8a6620; }
+.rec-rank.p1 { box-shadow: 0 0 10px currentColor; }
+.rec-rank.p2 { opacity: .8; }
+.rec-rank.p3, .rec-rank.p4 { opacity: .55; box-shadow: none; }
+.rec-rank.dim { color: var(--color-dim); border-color: var(--color-edge-2); }
 .react-flow__edge-text { fill: var(--color-dim) !important; font-family: var(--font-mono); font-size: 9px; }
 .react-flow__edge-textbg { fill: var(--color-ink-2) !important; }
 

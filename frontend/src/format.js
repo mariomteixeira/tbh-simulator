@@ -1,9 +1,12 @@
 export function fmt(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
   const abs = Math.abs(n);
-  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "k";
+  // sem decimal inutil: 220K (nao 220.0K), 1.5M, 2M
+  const trim = (s) =>
+    s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+  if (abs >= 1e9) return trim((n / 1e9).toFixed(2)) + "B";
+  if (abs >= 1e6) return trim((n / 1e6).toFixed(2)) + "M";
+  if (abs >= 1e3) return trim((n / 1e3).toFixed(1)) + "K";
   return String(Math.round(n));
 }
 

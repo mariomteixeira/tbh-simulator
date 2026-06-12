@@ -23,10 +23,11 @@ function nodeState(n) {
 
 function RuneNode({ data }) {
   const n = data.n;
+  const rk = data.rank; // {kind: "c"|"f", rank: 1..3} ou undefined
   const cls =
     "rune-tile " + nodeState(n) +
     (data.selected ? " sel" : "") +
-    (data.starred ? " star" : "") +
+    (rk ? ` rk rk-${rk.kind}${rk.rank}` : "") +
     (data.inPath ? " inpath" : "");
   const tip =
     `${n.name} — nv ${n.level}/${n.max}` +
@@ -38,7 +39,7 @@ function RuneNode({ data }) {
       <Handle type="target" position={Position.Top} className="rh" />
       <img src={`/runeicons/${n.icon}.png`} alt="" draggable={false} />
       <span className="rt-lv">{n.level}/{n.max}</span>
-      {data.starred && <span className="rt-star">★</span>}
+      {rk && <span className={`rt-rank rr-${rk.kind}`}>{rk.rank}º</span>}
       {data.needLevel != null && <span className="rt-need">nv{data.needLevel}</span>}
       <Handle type="source" position={Position.Bottom} className="rh" />
     </div>
@@ -47,14 +48,19 @@ function RuneNode({ data }) {
 
 const nodeTypes = { rune: RuneNode };
 
-function RecList({ title, recs, onPick, showSteps }) {
+function RecList({ title, recs, onPick, showSteps, kind }) {
   if (!recs?.length) return null;
   return (
     <div>
       <h3>{title}</h3>
       <div className="rec-list">
-        {recs.map((r) => (
+        {recs.map((r, i) => (
           <button className="rec" key={r.key + "-" + r.level} onClick={() => onPick(r.key)}>
+            {kind ? (
+              <span className={`rec-rank rr-${kind} p${Math.min(i + 1, 4)}`}>{i + 1}º</span>
+            ) : (
+              <span className="rec-rank dim">{i + 1}º</span>
+            )}
             <img src={`/runeicons/${r.icon}.png`} alt="" />
             <span className="rec-body">
               <span className="rec-name">
@@ -146,11 +152,16 @@ function Flow({ runes, sel, setSel }) {
     () => Object.fromEntries(runes.nodes.map((n) => [n.key, n])),
     [runes.nodes]
   );
-  const starred = useMemo(() => {
-    const s = new Set();
-    for (const r of runes.recommendations.combate.slice(0, 1)) s.add(r.key);
-    for (const r of runes.recommendations.farm.slice(0, 1)) s.add(r.key);
-    return s;
+  // ranking 1º/2º/3º por tipo: 1º pisca forte, 2º/3º brilham menos
+  const rankMap = useMemo(() => {
+    const m = {};
+    runes.recommendations.combate.slice(0, 3).forEach((r, i) => {
+      if (!m[r.key]) m[r.key] = { kind: "c", rank: i + 1 };
+    });
+    runes.recommendations.farm.slice(0, 3).forEach((r, i) => {
+      if (!m[r.key]) m[r.key] = { kind: "f", rank: i + 1 };
+    });
+    return m;
   }, [runes]);
 
   // rota de desbloqueio do nó selecionado: ancestrais até a raiz + níveis exigidos
@@ -180,14 +191,14 @@ function Flow({ runes, sel, setSel }) {
         data: {
           n,
           selected: sel === n.key,
-          starred: starred.has(n.key),
+          rank: rankMap[n.key],
           inPath: pathSet.has(n.key),
           needLevel: needMap[n.key],
         },
         draggable: false,
         connectable: false,
       })),
-    [runes.nodes, sel, starred, pathSet, needMap]
+    [runes.nodes, sel, rankMap, pathSet, needMap]
   );
 
   const rfEdges = useMemo(
@@ -227,8 +238,9 @@ function Flow({ runes, sel, setSel }) {
               <span><i className="lg maxed" /> máxima</span>
               <span><i className="lg owned" /> comprada</span>
               <span><i className="lg buyable" /> disponível</span>
-              <span><i className="lg afford" /> dá pra comprar</span>
               <span><i className="lg locked" /> bloqueada</span>
+              <span><i className="lg rank-c" /> 1º combate</span>
+              <span><i className="lg rank-f" /> 1º farm</span>
               <span><i className="lg path" /> rota</span>
               <span className="muted">gold: <b className="v-gold">{fmt(runes.gold)}</b></span>
             </div>
@@ -271,14 +283,16 @@ function Flow({ runes, sel, setSel }) {
       <aside className="rail">
         {sel != null && byKey[sel] && <RuneDetails n={byKey[sel]} onPick={pick} />}
         <RecList
-          title="Melhor compra — combate"
-          recs={runes.recommendations.combate}
+          title="Rank — combate"
+          recs={runes.recommendations.combate.slice(0, 3)}
           onPick={pick}
+          kind="c"
         />
         <RecList
-          title="Melhor compra — farm"
-          recs={runes.recommendations.farm}
+          title="Rank — farm"
+          recs={runes.recommendations.farm.slice(0, 3)}
           onPick={pick}
+          kind="f"
         />
         <RecList
           title="Vale destravar (rota)"
@@ -286,11 +300,6 @@ function Flow({ runes, sel, setSel }) {
           onPick={pick}
           showSteps
         />
-        <p className="muted small">
-          Mapa idêntico ao da wiki (posições extraídas de taskbarhero.wiki).
-          Clique numa runa bloqueada pra ver a <b>rota de desbloqueio</b>
-          destacada na árvore. Ganhos de combate usam o seu time real.
-        </p>
       </aside>
     </div>
   );
