@@ -99,6 +99,13 @@ class GameData:
         self.rune_levels = {}
         for r in _load(gd_dir, "rune_levels"):
             self.rune_levels.setdefault(r["LevelKey"], {})[r["Level"]] = r
+        # posicoes do mapa de runas (extraidas da wiki; arvore identica ao site)
+        self.rune_layout = {}
+        layout_file = Path(gd_dir) / "rune_layout.json"
+        if layout_file.exists():
+            data = json.loads(layout_file.read_text(encoding="utf-8-sig"))
+            self.rune_layout = {int(k): v for k, v in
+                                (data.get("positions") or {}).items()}
 
         self.offline_rewards = _load(gd_dir, "offline_rewards")
         self.pets = {p["PetKey"]: p for p in _load(gd_dir, "pets")}
@@ -947,7 +954,29 @@ def rune_advisor(gd: GameData, save: dict, runes: dict, *, fielded_saves,
             for c in str(nk).split():
                 parent[int(c)] = r["RuneKey"]
 
-    nodes, edges, recs = [], [], []
+    def unlock_chain(key):
+        """Passos (e custo) pra PODER comprar `key`: sobe ate a raiz somando os
+        niveis que faltam em cada ancestral cujo gate nao esta satisfeito."""
+        steps, cur = [], key
+        while True:
+            par = parent.get(cur)
+            if par is None:
+                break
+            need = gd.runes[cur].get("PrevNodeRequiredLevel") or 1
+            plv = levels.get(par, 0)
+            if plv < need:
+                rows_p = gd.rune_levels.get(gd.runes[par]["LevelDataKey"]) or {}
+                cost = sum((rows_p.get(L) or {}).get("CostValue") or 0
+                           for L in range(plv + 1, need + 1))
+                steps.append({"key": par,
+                              "name": _name(gd.runes[par].get("NameKey_i18n")),
+                              "icon": gd.runes[par].get("IconPath"),
+                              "fromLevel": plv, "toLevel": need, "cost": cost})
+            cur = par
+        steps.reverse()
+        return steps, sum(s["cost"] for s in steps)
+
+    nodes, edges, recs, unlock_recs = [], [], [], []
     for r in gd.runes.values():
         key = r["RuneKey"]
         lv = levels.get(key, 0)
@@ -973,9 +1002,33 @@ def rune_advisor(gd: GameData, save: dict, runes: dict, *, fielded_saves,
                              "pct": round(pct, 3), "label": label, "cost": cost,
                              "level": lv + 1, "affordable": cost <= (gold_now or 0),
                              "score": pct / cost})
+
+        # pathfinding: runa bloqueada -> cadeia de desbloqueio + "vale destravar?"
+        path = None
+        if not unlocked:
+            steps, chain_cost = unlock_chain(key)
+            path = {"steps": steps, "chainCost": chain_cost}
+            first = rows.get(1)
+            if first and steps:
+                kind, pct, label = gain_for(first["STATTYPE"], first["Value"] or 0)
+                total_cost = chain_cost + (first.get("CostValue") or 0)
+                if pct is not None and pct > 0 and total_cost > 0:
+                    unlock_recs.append({
+                        "key": key, "name": _name(r.get("NameKey_i18n")),
+                        "icon": r.get("IconPath"), "kind": kind,
+                        "pct": round(pct, 3), "label": label,
+                        "cost": total_cost, "level": 1,
+                        "steps": len(steps),
+                        "firstStep": {"key": steps[0]["key"], "name": steps[0]["name"],
+                                      "toLevel": steps[0]["toLevel"]},
+                        "affordable": total_cost <= (gold_now or 0),
+                        "score": pct / total_cost})
+
+        pos = gd.rune_layout.get(key) or {}
         nodes.append({
             "key": key, "name": _name(r.get("NameKey_i18n")),
             "icon": r.get("IconPath"), "stat": st,
+            "x": pos.get("x"), "y": pos.get("y"),
             "level": lv, "max": mx, "req": req,
             "unlocked": unlocked, "owned": lv > 0, "maxed": lv >= mx,
             "nextCost": (nxt or {}).get("CostValue"),
@@ -983,18 +1036,20 @@ def rune_advisor(gd: GameData, save: dict, runes: dict, *, fielded_saves,
             "perLevel": [{"level": L, "cost": (rows.get(L) or {}).get("CostValue"),
                           "value": (rows.get(L) or {}).get("Value")}
                          for L in range(1, mx + 1)],
-            "total": total, "gain": gain,
+            "total": total, "gain": gain, "path": path,
         })
         if par is not None:
             edges.append({"from": par, "to": key, "req": req})
 
     recs.sort(key=lambda x: x["score"], reverse=True)
+    unlock_recs.sort(key=lambda x: x["score"], reverse=True)
     return {
         "nodes": nodes, "edges": edges,
         "gold": gold_now,
         "recommendations": {
             "combate": [x for x in recs if x["kind"] == "combate"][:6],
             "farm": [x for x in recs if x["kind"] == "farm"][:6],
+            "destravar": unlock_recs[:5],
         },
     }
 

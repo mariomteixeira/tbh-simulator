@@ -45,6 +45,33 @@ EXTRA = {
 
 # Icones das runas (PNG da wiki, fan-made/comunidade) -> gamedata/icons/runes/
 RUNE_ICON_URL = "https://taskbarhero.wiki/game/runes/{}.png"
+RUNES_PAGE_URL = "https://taskbarhero.wiki/runes"
+
+
+def fetch_rune_layout(out_dir: Path, force: bool = False):
+    """Extrai as posicoes (x,y) da arvore de runas da pagina /runes da wiki.
+
+    A pagina embute um JSON com {key, x, y, ...} por runa — o MESMO layout do
+    mapa interativo do site, pra nossa arvore ficar identica.
+    """
+    import re
+    dest = out_dir / "rune_layout.json"
+    if dest.exists() and not force:
+        return
+    html = fetch(RUNES_PAGE_URL).decode("utf-8", "replace").replace('\\"', '"')
+    pairs = re.findall(r'\{"key": (\d+), "x": (-?[\d.]+), "y": (-?[\d.]+)', html)
+    if len(pairs) < 100:
+        raise RuntimeError(f"layout de runas suspeito ({len(pairs)} nos)")
+    m = re.search(r'"bounds": \{"minX": (-?[\d.]+), "maxX": (-?[\d.]+), '
+                  r'"minY": (-?[\d.]+), "maxY": (-?[\d.]+)\}', html)
+    out = {
+        "source": RUNES_PAGE_URL,
+        "bounds": (dict(zip(("minX", "maxX", "minY", "maxY"),
+                            map(float, m.groups()))) if m else None),
+        "positions": {k: {"x": float(x), "y": float(y)} for k, x, y in pairs},
+    }
+    dest.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"[ok]   rune_layout: {len(pairs)} posicoes extraidas da wiki")
 
 
 def fetch_rune_icons(out_dir: Path, force: bool = False):
@@ -110,6 +137,11 @@ def main():
 
     _, icon_failed = fetch_rune_icons(OUT_DIR, force=args.force)
     failed += icon_failed
+    try:
+        fetch_rune_layout(OUT_DIR, force=args.force)
+    except Exception as e:
+        print(f"[erro] rune_layout: {e}", file=sys.stderr)
+        failed.append("rune_layout")
 
     print(f"\n{ok} baixadas, {skipped} ja existiam, {len(failed)} falharam")
     if failed:

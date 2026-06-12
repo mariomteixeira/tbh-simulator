@@ -505,48 +505,88 @@ button.link:hover { color: var(--color-blood); }
 .lg.buyable { background: var(--color-cyan); }
 .lg.locked { background: #27303f; }
 
-.rune-node {
-  display: flex; align-items: center; gap: 8px;
-  width: 178px; padding: 6px 9px;
-  background: var(--color-surface); border: 1px solid var(--color-edge-2);
-  border-radius: 9px; cursor: pointer; position: relative;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+/* tile quadrado, identico ao mapa da wiki (grade de 72px, tile 48px) */
+.rune-tile {
+  width: 48px; height: 48px; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  background: #11151f; border: 2px solid var(--color-edge-2);
+  border-radius: 8px; cursor: pointer;
+  transition: transform .1s ease, box-shadow .15s ease, border-color .15s ease;
 }
-.rune-node:hover { transform: translateY(-1px); border-color: var(--color-dim); }
-.rune-node img { width: 26px; height: 26px; flex: none; image-rendering: pixelated; }
-.rn-info { display: flex; flex-direction: column; min-width: 0; }
-.rn-name {
-  font-size: .68rem; font-weight: 600; line-height: 1.25;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.rune-tile:hover { transform: scale(1.12); z-index: 5; }
+.rune-tile img { width: 30px; height: 30px; image-rendering: pixelated; pointer-events: none; }
+.rt-lv {
+  position: absolute; right: -2px; bottom: -2px;
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 700;
+  line-height: 1; padding: 2px 3px; border-radius: 4px;
+  background: #0a0d14; border: 1px solid var(--color-edge-2); color: var(--color-dim);
 }
-.rn-lv { font-family: var(--font-mono); font-size: .62rem; color: var(--color-dim); }
-.rn-lv em { font-style: normal; color: var(--color-gold); }
-.rune-node.maxed { border-color: rgba(245, 177, 61, .65); }
-.rune-node.maxed .rn-name { color: var(--color-gold); }
-.rune-node.owned { border-color: rgba(245, 177, 61, .35); }
-.rune-node.buyable { border-color: rgba(56, 217, 207, .5); }
-.rune-node.buyable.afford { box-shadow: 0 0 0 1px rgba(56, 217, 207, .35), 0 0 14px rgba(56, 217, 207, .18); }
-.rune-node.locked { opacity: .42; }
-.rune-node.locked img { filter: grayscale(1); }
-.rune-node.sel {
-  border-color: var(--color-gold) !important;
-  box-shadow: 0 0 0 1px var(--color-gold), 0 0 18px rgba(245, 177, 61, .35);
+.rt-star {
+  position: absolute; top: -9px; right: -7px; font-size: .8rem;
+  color: var(--color-gold); text-shadow: 0 0 9px rgba(245, 177, 61, .9);
+  animation: starPulse 1.6s ease-in-out infinite;
 }
-.rune-node.star::after {
-  content: ""; position: absolute; inset: -3px; border-radius: 11px;
-  border: 1px solid rgba(245, 177, 61, .5); pointer-events: none;
-  animation: starPulse 2s ease-in-out infinite;
+@keyframes starPulse { 50% { transform: scale(1.25); } }
+.rt-need {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 700;
+  padding: 1px 5px; border-radius: 99px;
+  background: #3b1140; color: #f085ff; border: 1px solid #a23bb5;
+  white-space: nowrap;
 }
-@keyframes starPulse { 50% { box-shadow: 0 0 16px rgba(245, 177, 61, .35); } }
-.rn-badge {
-  position: absolute; top: -7px; right: -6px; font-size: .72rem;
-  color: var(--color-gold); text-shadow: 0 0 8px rgba(245, 177, 61, .8);
-}
-.rune-node .react-flow__handle { opacity: 0; pointer-events: none; }
 
-.redge.on path { stroke: rgba(245, 177, 61, .55) !important; stroke-width: 1.6; }
-.redge.open path { stroke: rgba(56, 217, 207, .4) !important; }
-.redge.off path { stroke: var(--color-edge-2) !important; }
+/* estados — cores FORTES pra bater o olho e saber */
+.rune-tile.maxed {
+  border-color: var(--color-gold);
+  background: linear-gradient(160deg, #2b2008, #181208);
+  box-shadow: 0 0 12px rgba(245, 177, 61, .45);
+}
+.rune-tile.maxed .rt-lv { color: var(--color-gold); border-color: rgba(245,177,61,.5); }
+.rune-tile.owned {
+  border-color: #c08a2d;
+  background: linear-gradient(160deg, #241c0c, #14110a);
+  box-shadow: 0 0 7px rgba(192, 138, 45, .3);
+}
+.rune-tile.owned .rt-lv { color: #e8b35a; }
+.rune-tile.buyable {
+  border-color: var(--color-cyan);
+  background: linear-gradient(160deg, #0a2422, #0c1518);
+  box-shadow: 0 0 9px rgba(56, 217, 207, .3);
+}
+.rune-tile.buyable .rt-lv { color: var(--color-cyan); }
+.rune-tile.buyable.afford {
+  box-shadow: 0 0 0 2px rgba(56, 217, 207, .45), 0 0 18px rgba(56, 217, 207, .5);
+  animation: buyPulse 2s ease-in-out infinite;
+}
+@keyframes buyPulse { 50% { box-shadow: 0 0 0 2px rgba(56,217,207,.7), 0 0 26px rgba(56,217,207,.7); } }
+.rune-tile.locked { opacity: .35; border-color: #232b3a; }
+.rune-tile.locked img { filter: grayscale(1) brightness(.8); }
+.rune-tile.sel {
+  border-color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.65), 0 0 22px rgba(255,255,255,.35) !important;
+  z-index: 6;
+}
+.rune-tile.inpath {
+  opacity: 1; border-color: #d65bff;
+  box-shadow: 0 0 0 2px rgba(214, 91, 255, .4), 0 0 16px rgba(214, 91, 255, .4);
+}
+.rune-tile.inpath img { filter: none; }
+.rune-tile .rh { opacity: 0; pointer-events: none; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+/* conectores retos, grossos como na wiki */
+.redge path { stroke-width: 3 !important; }
+.redge.on path { stroke: rgba(245, 177, 61, .75) !important; }
+.redge.open path { stroke: rgba(56, 217, 207, .45) !important; }
+.redge.off path { stroke: #2b3447 !important; }
+.redge.path path {
+  stroke: #d65bff !important; stroke-width: 4 !important;
+  filter: drop-shadow(0 0 5px rgba(214, 91, 255, .6));
+  animation: pathDash 1.2s linear infinite;
+  stroke-dasharray: 10 5;
+}
+@keyframes pathDash { to { stroke-dashoffset: -15; } }
+.lg.afford { background: var(--color-cyan); box-shadow: 0 0 7px rgba(56,217,207,.9); }
+.lg.path { background: #d65bff; }
 .react-flow__edge-text { fill: var(--color-dim) !important; font-family: var(--font-mono); font-size: 9px; }
 .react-flow__edge-textbg { fill: var(--color-ink-2) !important; }
 
@@ -575,6 +615,28 @@ button.link:hover { color: var(--color-blood); }
 .rec-gain { font-size: .72rem; color: var(--color-cyan); font-family: var(--font-mono); }
 .rec-cost { font-family: var(--font-mono); font-size: .74rem; color: var(--color-dim); }
 .rec-cost.ok { color: var(--color-grass); }
+.rec-step { font-size: .68rem; color: #d65bff; font-family: var(--font-mono); }
+
+/* rota de desbloqueio nos detalhes */
+.rd-path { margin: 8px 0 4px; display: flex; flex-direction: column; }
+.rd-path-title {
+  font-family: var(--font-display); font-size: .6rem; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: #d65bff;
+  padding-bottom: 5px;
+}
+.rd-step {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; border-top: 1px solid var(--color-edge);
+  padding: 6px 2px; cursor: pointer; color: var(--color-fg); font: inherit;
+  font-size: .78rem; text-align: left;
+}
+.rd-step:hover { background: rgba(214, 91, 255, .06); }
+.rd-step img { width: 20px; height: 20px; image-rendering: pixelated; }
+.rd-step span { flex: 1; }
+.rd-step em { font-style: normal; color: #d65bff; font-family: var(--font-mono); font-size: .7rem; }
+.rd-step b { font-family: var(--font-mono); font-weight: 600; }
+.rd-step.total { cursor: default; border-top: 1px solid var(--color-edge-2); }
+.rd-step.total span { color: var(--color-dim); }
 
 .rune-detail .rd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .rune-detail .rd-head img { width: 34px; height: 34px; image-rendering: pixelated; }

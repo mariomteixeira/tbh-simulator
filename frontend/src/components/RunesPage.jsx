@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
-  Background,
   Controls,
   MiniMap,
   Handle,
@@ -13,37 +12,7 @@ import "@xyflow/react/dist/style.css";
 import { fmt } from "../format.js";
 import { runeStatPt } from "../statNames.js";
 
-const COL_W = 215; // distância horizontal entre profundidades
-const ROW_H = 86;  // distância vertical entre folhas
-
-/* tidy tree: folhas em linhas sequenciais, pai centrado nos filhos */
-function layoutTree(nodes, edges) {
-  const children = {};
-  const hasParent = new Set();
-  for (const e of edges) {
-    (children[e.from] ??= []).push(e.to);
-    hasParent.add(e.to);
-  }
-  const roots = nodes.map((n) => n.key).filter((k) => !hasParent.has(k));
-  const pos = {};
-  let leaf = 0;
-  const place = (k, depth) => {
-    const kids = children[k] || [];
-    if (!kids.length) {
-      pos[k] = { x: depth * COL_W, y: leaf++ * ROW_H };
-      return pos[k].y;
-    }
-    const ys = kids.map((c) => place(c, depth + 1));
-    const y = (Math.min(...ys) + Math.max(...ys)) / 2;
-    pos[k] = { x: depth * COL_W, y };
-    return y;
-  };
-  for (const r of roots) {
-    place(r, 0);
-    leaf += 1; // respiro entre as duas árvores
-  }
-  return pos;
-}
+const TILE = 48; // tile quadrado, grade da wiki tem passo 72 (gap 24)
 
 function nodeState(n) {
   if (n.maxed) return "maxed";
@@ -54,28 +23,31 @@ function nodeState(n) {
 
 function RuneNode({ data }) {
   const n = data.n;
+  const cls =
+    "rune-tile " + nodeState(n) +
+    (data.selected ? " sel" : "") +
+    (data.starred ? " star" : "") +
+    (data.inPath ? " inpath" : "");
+  const tip =
+    `${n.name} — nv ${n.level}/${n.max}` +
+    (n.unlocked
+      ? n.maxed ? " (máxima)" : ` · próx: ${fmt(n.nextCost)}g`
+      : ` (bloqueada, pai nv ${n.req})`);
   return (
-    <div className={"rune-node " + nodeState(n) + (data.selected ? " sel" : "") + (data.starred ? " star" : "")}>
-      <Handle type="target" position={Position.Left} />
+    <div className={cls} title={tip}>
+      <Handle type="target" position={Position.Top} className="rh" />
       <img src={`/runeicons/${n.icon}.png`} alt="" draggable={false} />
-      <div className="rn-info">
-        <span className="rn-name">{n.name}</span>
-        <span className="rn-lv">
-          {n.level}/{n.max}
-          {!n.maxed && n.unlocked && n.nextCost != null && (
-            <em> · {fmt(n.nextCost)}g</em>
-          )}
-        </span>
-      </div>
-      {data.starred && <span className="rn-badge">★</span>}
-      <Handle type="source" position={Position.Right} />
+      <span className="rt-lv">{n.level}/{n.max}</span>
+      {data.starred && <span className="rt-star">★</span>}
+      {data.needLevel != null && <span className="rt-need">nv{data.needLevel}</span>}
+      <Handle type="source" position={Position.Bottom} className="rh" />
     </div>
   );
 }
 
 const nodeTypes = { rune: RuneNode };
 
-function RecList({ title, recs, gold, onPick }) {
+function RecList({ title, recs, onPick, showSteps }) {
   if (!recs?.length) return null;
   return (
     <div>
@@ -89,6 +61,11 @@ function RecList({ title, recs, gold, onPick }) {
                 {r.name} <em>nv {r.level}</em>
               </span>
               <span className="rec-gain">{r.label}</span>
+              {showSteps && r.firstStep && (
+                <span className="rec-step">
+                  {r.steps} passo(s) · 1º: {r.firstStep.name} → nv{r.firstStep.toLevel}
+                </span>
+              )}
             </span>
             <span className={"rec-cost" + (r.affordable ? " ok" : "")}>
               {fmt(r.cost)}g
@@ -100,133 +77,7 @@ function RecList({ title, recs, gold, onPick }) {
   );
 }
 
-function Flow({ runes, sel, setSel }) {
-  const { setCenter } = useReactFlow();
-  const starred = useMemo(() => {
-    const s = new Set();
-    for (const r of runes.recommendations.combate.slice(0, 1)) s.add(r.key);
-    for (const r of runes.recommendations.farm.slice(0, 1)) s.add(r.key);
-    return s;
-  }, [runes]);
-
-  const pos = useMemo(
-    () => layoutTree(runes.nodes, runes.edges),
-    [runes.nodes, runes.edges]
-  );
-  const byKey = useMemo(
-    () => Object.fromEntries(runes.nodes.map((n) => [n.key, n])),
-    [runes.nodes]
-  );
-
-  const rfNodes = useMemo(
-    () =>
-      runes.nodes.map((n) => ({
-        id: String(n.key),
-        type: "rune",
-        position: pos[n.key] || { x: 0, y: 0 },
-        data: { n, selected: sel === n.key, starred: starred.has(n.key) },
-        draggable: false,
-        connectable: false,
-      })),
-    [runes.nodes, pos, sel, starred]
-  );
-  const rfEdges = useMemo(
-    () =>
-      runes.edges.map((e) => {
-        const both = byKey[e.from]?.owned && byKey[e.to]?.owned;
-        const open = byKey[e.to]?.unlocked;
-        return {
-          id: e.from + ">" + e.to,
-          source: String(e.from),
-          target: String(e.to),
-          type: "smoothstep",
-          label: e.req > 1 ? "nv " + e.req : undefined,
-          className: "redge " + (both ? "on" : open ? "open" : "off"),
-        };
-      }),
-    [runes.edges, byKey]
-  );
-
-  const pick = useCallback(
-    (key) => {
-      setSel(key);
-      const p = pos[key];
-      if (p) setCenter(p.x + 80, p.y + 20, { zoom: 1, duration: 500 });
-    },
-    [pos, setCenter, setSel]
-  );
-
-  return (
-    <div className="page runes-page">
-      <div className="main-col">
-        <section className="sec flow-sec">
-          <div className="sec-head">
-            <h2>Árvore de runas</h2>
-            <div className="flow-legend">
-              <span><i className="lg maxed" /> máxima</span>
-              <span><i className="lg owned" /> comprada</span>
-              <span><i className="lg buyable" /> disponível</span>
-              <span><i className="lg locked" /> bloqueada</span>
-              <span className="muted">★ melhor compra · gold: <b className="v-gold">{fmt(runes.gold)}</b></span>
-            </div>
-          </div>
-          <div className="flow-wrap">
-            <ReactFlow
-              nodes={rfNodes}
-              edges={rfEdges}
-              nodeTypes={nodeTypes}
-              onNodeClick={(_, n) => pick(Number(n.id))}
-              fitView
-              fitViewOptions={{ padding: 0.15, maxZoom: 0.9 }}
-              minZoom={0.08}
-              maxZoom={1.6}
-              panOnScroll
-              zoomOnScroll={false}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              proOptions={{ hideAttribution: false }}
-            >
-              <Background gap={42} size={1} color="#1b2433" />
-              <Controls showInteractive={false} />
-              <MiniMap
-                pannable
-                zoomable
-                nodeColor={(n) => {
-                  const s = nodeState(n.data.n);
-                  return s === "maxed" ? "#f5b13d" : s === "owned" ? "#9a7a35"
-                    : s.startsWith("buyable") ? "#38d9cf" : "#27303f";
-                }}
-                maskColor="rgba(7,9,14,.78)"
-                bgColor="#0a0d14"
-              />
-            </ReactFlow>
-          </div>
-        </section>
-      </div>
-
-      <aside className="rail">
-        {sel != null && byKey[sel] && <RuneDetails n={byKey[sel]} />}
-        <RecList
-          title="Melhor compra — combate"
-          recs={runes.recommendations.combate}
-          onPick={pick}
-        />
-        <RecList
-          title="Melhor compra — farm"
-          recs={runes.recommendations.farm}
-          onPick={pick}
-        />
-        <p className="muted small">
-          Ganhos de combate são recalculados com o seu time real; ganhos de farm
-          valem para o estágio atual. Custo em gold; ★ marca a melhor compra de
-          cada tipo. Ícones: taskbarhero.wiki (fan-made).
-        </p>
-      </aside>
-    </div>
-  );
-}
-
-function RuneDetails({ n }) {
+function RuneDetails({ n, onPick }) {
   return (
     <div>
       <h3>Runa selecionada</h3>
@@ -237,7 +88,7 @@ function RuneDetails({ n }) {
             <b>{n.name}</b>
             <span className="muted">
               {" "}nível {n.level}/{n.max}
-              {!n.unlocked && " · bloqueada (pai precisa nv " + n.req + ")"}
+              {!n.unlocked && " · bloqueada"}
             </span>
           </div>
         </div>
@@ -248,6 +99,24 @@ function RuneDetails({ n }) {
               <> → <b className={n.gain.kind === "combate" ? "v-exp" : "v-gold"}>{n.gain.label}</b></>
             )}
           </p>
+        )}
+        {n.path && n.path.steps.length > 0 && (
+          <div className="rd-path">
+            <span className="rd-path-title">rota pra destravar</span>
+            {n.path.steps.map((s, i) => (
+              <button className="rd-step" key={i} onClick={() => onPick(s.key)}>
+                <img src={`/runeicons/${s.icon}.png`} alt="" />
+                <span>
+                  {s.name} <em>nv{s.fromLevel}→{s.toLevel}</em>
+                </span>
+                <b>{fmt(s.cost)}g</b>
+              </button>
+            ))}
+            <div className="rd-step total">
+              <span>total pra liberar</span>
+              <b className="v-gold">{fmt(n.path.chainCost)}g</b>
+            </div>
+          </div>
         )}
         <table className="mini">
           <thead>
@@ -266,6 +135,163 @@ function RuneDetails({ n }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function Flow({ runes, sel, setSel }) {
+  const { setCenter } = useReactFlow();
+
+  const byKey = useMemo(
+    () => Object.fromEntries(runes.nodes.map((n) => [n.key, n])),
+    [runes.nodes]
+  );
+  const starred = useMemo(() => {
+    const s = new Set();
+    for (const r of runes.recommendations.combate.slice(0, 1)) s.add(r.key);
+    for (const r of runes.recommendations.farm.slice(0, 1)) s.add(r.key);
+    return s;
+  }, [runes]);
+
+  // rota de desbloqueio do nó selecionado: ancestrais até a raiz + níveis exigidos
+  const { pathSet, needMap } = useMemo(() => {
+    const selNode = sel != null ? byKey[sel] : null;
+    if (!selNode || selNode.unlocked) return { pathSet: new Set(), needMap: {} };
+    const parent = {};
+    for (const e of runes.edges) parent[e.to] = e.from;
+    const set = new Set([selNode.key]);
+    let cur = selNode.key;
+    while (parent[cur] != null) {
+      cur = parent[cur];
+      set.add(cur);
+    }
+    const need = {};
+    for (const s of selNode.path?.steps || []) need[s.key] = s.toLevel;
+    return { pathSet: set, needMap: need };
+  }, [sel, byKey, runes.edges]);
+
+  // posições EXATAS da wiki (x,y são centros; tile 48 -> desloca metade)
+  const rfNodes = useMemo(
+    () =>
+      runes.nodes.map((n) => ({
+        id: String(n.key),
+        type: "rune",
+        position: { x: (n.x ?? 0) - TILE / 2, y: (n.y ?? 0) - TILE / 2 },
+        data: {
+          n,
+          selected: sel === n.key,
+          starred: starred.has(n.key),
+          inPath: pathSet.has(n.key),
+          needLevel: needMap[n.key],
+        },
+        draggable: false,
+        connectable: false,
+      })),
+    [runes.nodes, sel, starred, pathSet, needMap]
+  );
+
+  const rfEdges = useMemo(
+    () =>
+      runes.edges.map((e) => {
+        const inPath = pathSet.has(e.from) && pathSet.has(e.to);
+        const both = byKey[e.from]?.owned && byKey[e.to]?.owned;
+        const open = byKey[e.to]?.unlocked;
+        return {
+          id: e.from + ">" + e.to,
+          source: String(e.from),
+          target: String(e.to),
+          type: "straight",
+          className:
+            "redge " + (inPath ? "path" : both ? "on" : open ? "open" : "off"),
+        };
+      }),
+    [runes.edges, byKey, pathSet]
+  );
+
+  const pick = useCallback(
+    (key) => {
+      setSel(key);
+      const n = byKey[key];
+      if (n && n.x != null) setCenter(n.x, n.y, { zoom: 1.15, duration: 500 });
+    },
+    [byKey, setCenter, setSel]
+  );
+
+  return (
+    <div className="page runes-page">
+      <div className="main-col">
+        <section className="sec flow-sec">
+          <div className="sec-head">
+            <h2>Árvore de runas</h2>
+            <div className="flow-legend">
+              <span><i className="lg maxed" /> máxima</span>
+              <span><i className="lg owned" /> comprada</span>
+              <span><i className="lg buyable" /> disponível</span>
+              <span><i className="lg afford" /> dá pra comprar</span>
+              <span><i className="lg locked" /> bloqueada</span>
+              <span><i className="lg path" /> rota</span>
+              <span className="muted">gold: <b className="v-gold">{fmt(runes.gold)}</b></span>
+            </div>
+          </div>
+          <div className="flow-wrap">
+            <ReactFlow
+              nodes={rfNodes}
+              edges={rfEdges}
+              nodeTypes={nodeTypes}
+              onNodeClick={(_, n) => pick(Number(n.id))}
+              onPaneClick={() => setSel(null)}
+              fitView
+              fitViewOptions={{ padding: 0.06 }}
+              minZoom={0.15}
+              maxZoom={2.2}
+              panOnScroll
+              zoomOnScroll={false}
+              nodesDraggable={false}
+              nodesConnectable={false}
+            >
+              <Controls showInteractive={false} />
+              <MiniMap
+                pannable
+                zoomable
+                nodeStrokeWidth={6}
+                nodeColor={(n) => {
+                  const s = nodeState(n.data.n);
+                  return s === "maxed" ? "#f5b13d"
+                    : s === "owned" ? "#c08a2d"
+                    : s.startsWith("buyable") ? "#38d9cf" : "#333d4f";
+                }}
+                maskColor="rgba(7,9,14,.72)"
+                bgColor="#0a0d14"
+              />
+            </ReactFlow>
+          </div>
+        </section>
+      </div>
+
+      <aside className="rail">
+        {sel != null && byKey[sel] && <RuneDetails n={byKey[sel]} onPick={pick} />}
+        <RecList
+          title="Melhor compra — combate"
+          recs={runes.recommendations.combate}
+          onPick={pick}
+        />
+        <RecList
+          title="Melhor compra — farm"
+          recs={runes.recommendations.farm}
+          onPick={pick}
+        />
+        <RecList
+          title="Vale destravar (rota)"
+          recs={runes.recommendations.destravar}
+          onPick={pick}
+          showSteps
+        />
+        <p className="muted small">
+          Mapa idêntico ao da wiki (posições extraídas de taskbarhero.wiki).
+          Clique numa runa bloqueada pra ver a <b>rota de desbloqueio</b>
+          destacada na árvore. Ganhos de combate usam o seu time real.
+        </p>
+      </aside>
     </div>
   );
 }
