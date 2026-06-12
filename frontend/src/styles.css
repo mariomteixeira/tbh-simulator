@@ -326,6 +326,7 @@ table.farm tr.beyond td { opacity: .45; }
   padding: 8px 10px; font-family: var(--font-body); font-size: .82rem;
 }
 .ceiling-sel:focus { outline: none; border-color: var(--color-gold); }
+.cal-sel { max-width: 420px; }
 
 .rating { font-size: .74rem; font-weight: 650; font-family: var(--font-display); letter-spacing: .04em; }
 .r-seguro { color: var(--color-grass); }

@@ -28,7 +28,13 @@ export default function ModelTab({ sim, manualSamples }) {
   const killRate = sim.party?.dps && cal.factor ? sim.party.dps * cal.factor : null;
 
   const [secs, setSecs] = React.useState("");
+  const [calKey, setCalKey] = React.useState(null); // null = segue a fase atual
   const curRow = (sim.farm.rows || []).find((r) => r.current);
+  const calOptions = (sim.farm.rows || []).filter((r) => r.type !== "ACTBOSS");
+  const calRow =
+    calKey != null
+      ? calOptions.find((r) => r.key === calKey) || curRow
+      : curRow;
   async function saveCal(stageKey) {
     const v = parseFloat(secs);
     if (!v || v <= 0) return;
@@ -38,6 +44,7 @@ export default function ModelTab({ sim, manualSamples }) {
       body: JSON.stringify({ stage: Number(stageKey), clearSec: v }),
     });
     setSecs("");
+    setCalKey(null); // volta a seguir a fase atual
   }
   async function removeCal(stageKey) {
     await fetch("/api/calibration/" + stageKey, { method: "DELETE" });
@@ -52,24 +59,38 @@ export default function ModelTab({ sim, manualSamples }) {
           jogo mostra, ex.: "Cleared Stage 2-6. (257s)"). É a única fonte de
           tempo do modelo — um único tempo já ancora a velocidade de kill.
         </p>
-        {curRow ? (
+        {calRow ? (
           <div className="cal-form">
-            <div className="cal-stage">
-              fase atual: <b>{curRow.tag} {curRow.label}</b>{" "}
-              <span className="muted">{curRow.name}</span>
-              {curRow.clearTime != null && (
-                <span className="muted"> · previsto agora {Math.round(curRow.clearTime)}s</span>
-              )}
+            <div className="cal-row">
+              <select
+                className="ceiling-sel cal-sel"
+                value={calRow.key}
+                onChange={(e) => setCalKey(Number(e.target.value))}
+              >
+                {calOptions.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.tag} {r.label} — {r.name}
+                    {r.current ? " (fase atual)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="cal-stage muted small">
+              {calKey == null
+                ? "seguindo a fase atual"
+                : "fase escolhida à mão (não muda quando você troca de mapa)"}
+              {calRow.clearTime != null &&
+                ` · previsto agora ${Math.round(calRow.clearTime)}s`}
             </div>
             <div className="cal-row">
               <input
                 type="number" min="1" step="1" placeholder="segundos"
                 value={secs}
                 onChange={(e) => setSecs(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && saveCal(curRow.key)}
+                onKeyDown={(e) => e.key === "Enter" && saveCal(calRow.key)}
               />
               <span className="muted">s</span>
-              <button onClick={() => saveCal(curRow.key)} disabled={!secs}>
+              <button onClick={() => saveCal(calRow.key)} disabled={!secs}>
                 Salvar
               </button>
             </div>

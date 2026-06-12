@@ -69,6 +69,7 @@ class SaveWatcher:
         self.sim_error = None
         self.error = None
         self.last_read = None      # epoch da ultima leitura ok
+        self._inner = None         # ultimo save decriptado (cache p/ resimulate)
 
         self.gamedata = None
         self.gamedata_error = None
@@ -131,6 +132,7 @@ class SaveWatcher:
                 self.error = f"leitura falhou ({e}); tentando de novo"
             return
 
+        self._inner = inner  # cache pro resimulate (teto/calibracao na hora)
         with self.lock:
             self.error = None
             self.last_read = time.time()
@@ -176,14 +178,18 @@ class SaveWatcher:
         return self.store.manual_samples()
 
     def resimulate(self):
-        """Re-roda a simulacao com as amostras atuais, sem esperar o proximo
-        save. Usado apos calibracao manual para o painel refletir na hora."""
+        """Re-roda a simulacao com as amostras/teto atuais, sem esperar o
+        proximo save. Se o save estiver no meio de uma gravacao (ou o jogo
+        fechado), usa o ultimo save decriptado em cache — senao a mudanca
+        so apareceria no proximo save do jogo."""
         if not self.gamedata:
             return
         try:
             inner = core.safe_copy_and_decrypt(self.save_path)
         except (ValueError, OSError):
-            return
+            inner = getattr(self, "_inner", None)
+            if inner is None:
+                return
         with self.lock:
             measured = self._measured()
         try:

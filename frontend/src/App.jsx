@@ -156,7 +156,15 @@ function CeilingPicker({ farm }) {
   const opts = (farm.rows || []).filter(
     (r) => r.cleared && r.type !== "ACTBOSS"
   );
+  // UI otimista: mostra a escolha na hora; sincroniza quando o servidor refletir
+  const [pending, setPending] = useState(null);
+  useEffect(() => {
+    if (pending !== null && String(farm.ceiling ?? "") === String(pending)) {
+      setPending(null);
+    }
+  }, [farm.ceiling, pending]);
   async function set(v) {
+    setPending(v);
     if (v === "") await fetch("/api/ceiling", { method: "DELETE" });
     else
       await fetch("/api/ceiling", {
@@ -165,12 +173,13 @@ function CeilingPicker({ farm }) {
         body: JSON.stringify({ stage: Number(v) }),
       });
   }
+  const shown = pending !== null ? pending : String(farm.ceiling ?? "");
   return (
     <div>
       <h3>Teto — até onde você farma</h3>
       <select
         className="ceiling-sel"
-        value={farm.ceiling ?? ""}
+        value={shown}
         onChange={(e) => set(e.target.value)}
       >
         <option value="">sem teto (tudo liberado)</option>
@@ -181,6 +190,7 @@ function CeilingPicker({ farm }) {
         ))}
       </select>
       <p className="muted small" style={{ marginTop: 6 }}>
+        {pending !== null && <em className="muted">aplicando… </em>}
         Nada <b>acima do teto</b> entra em recomendação (farm, push ou baús) —
         mesmo que o jogo já tenha liberado.
       </p>
