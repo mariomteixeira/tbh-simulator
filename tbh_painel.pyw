@@ -108,7 +108,7 @@ def render_info(snap, now):
     eph = sum(v for v in exp_by.values() if v) if exp_by else None
     rows.append(("Exp/h (sessão)", fmt(eph), None))
 
-    rows.append(("Amostras de clear", str(len(snap.get("samples") or [])), None))
+    rows.append(("Calibrações", str(len(snap.get("manualSamples") or [])), None))
 
     err = st.get("error") or st.get("simError")
     if err:

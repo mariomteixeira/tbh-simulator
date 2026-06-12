@@ -253,14 +253,7 @@ function OfflinePage({ sim }) {
 
 function ModelPage({ d, sim }) {
   return {
-    main: sim ? (
-      <ModelTab
-        sim={sim}
-        samples={d.samples}
-        manualSamples={d.manualSamples}
-        sampleLog={d.sampleLog}
-      />
-    ) : null,
+    main: sim ? <ModelTab sim={sim} manualSamples={d.manualSamples} /> : null,
     rail: null,
   };
 }

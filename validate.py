@@ -13,7 +13,7 @@ from pathlib import Path
 
 import tbh_tracker as core
 from simulator import (GameData, StatBag, simulate, fit_clear_model,
-                       fit_factor, make_clear_sample, mitigation, offline_info,
+                       fit_factor, mitigation, offline_info,
                        project_levels, rune_stats, _crit_factor,
                        _rune_to_hero_stat, T_FIXED, T_WAVE)
 
@@ -193,66 +193,6 @@ def t_real_save(gd):
     return save
 
 
-def t_sample_derivation(gd, save):
-    econ = gd.stage_econ(2109)
-    runes = rune_stats(gd, save)
-    from simulator import _gold_per_clear
-    gpc = _gold_per_clear(gd, runes, econ)
-    # fallback por gold (saves sem contador)
-    anchor = {"currentStage": 2109, "lastSavedTime": 0, "gold": 0}
-    cur = {"currentStage": 2109, "lastSavedTime": int(120 * 1e7),
-           "gold": gpc * 2}  # 2 clears em 120s
-    s, _, _ = make_clear_sample(gd, save, anchor, cur, party_dps=2000)
-    check("amostra(gold): clearSec = 60s para 2 clears em 120s",
-          s and abs(s["clearSec"] - 60) < 0.5 and s["method"] == "gold", f"got {s}")
-    s2, keep2, _ = make_clear_sample(gd, save, anchor, dict(cur, gold=-5), 2000)
-    check("amostra(gold): gold gasto -> janela invalida (re-ancora)",
-          s2 is None and keep2 is False)
-
-    # metodo exato pelo contador de clears + validacao por kills
-    kills = econ["kills"]
-    anchor3 = dict(anchor, totalClears=100, totalKills=50000)
-    cur3 = dict(cur, gold=0, totalClears=103,
-                totalKills=50000 + round(3 * kills))
-    s3, _, _ = make_clear_sample(gd, save, anchor3, cur3, 2000)
-    check("amostra(contador): 3 clears em 120s -> 40s, metodo exato",
-          s3 and abs(s3["clearSec"] - 40) < 0.5 and s3["method"] == "clears",
-          f"got {s3}")
-    # run longa: nenhum clear entre saves -> janela ACUMULA (keep_anchor)
-    cur_acc = dict(cur, gold=0, totalClears=100,
-                   totalKills=50000 + round(0.4 * kills))
-    s_acc, keep_acc, _ = make_clear_sample(gd, save, anchor3, cur_acc, 2000)
-    check("amostra(contador): run mais longa que o intervalo de save -> acumula",
-          s_acc is None and keep_acc is True)
-    # janela acumulada de 300s fecha quando o clear completa
-    cur_close = dict(cur, lastSavedTime=int(300 * 1e7), gold=0,
-                     totalClears=101, totalKills=50000 + round(1.3 * kills))
-    s_close, _, _ = make_clear_sample(gd, save, anchor3, cur_close, 2000)
-    check("amostra(contador): janela de 300s com 1 clear -> 300s/run",
-          s_close and abs(s_close["clearSec"] - 300) < 0.5, f"got {s_close}")
-    # kills/run observados vao para o info (alimentam o aprendizado por fase)
-    s7, _, info7 = make_clear_sample(gd, save, anchor3, cur3, 2000)
-    check("amostra(contador): killsPorRun registrado no info",
-          s7 and abs(info7["killsPorRun"] - kills) < 1, f"got {info7}")
-    # janela curta (<60s) mesmo com clear -> segue acumulando
-    cur8 = dict(cur, lastSavedTime=int(40 * 1e7), gold=0, totalClears=101,
-                totalKills=50000 + round(kills))
-    s8, keep8, _ = make_clear_sample(gd, save, anchor3, cur8, 2000)
-    check("amostra(contador): janela <60s com clear -> acumula",
-          s8 is None and keep8 is True)
-    anchor5 = dict(anchor3, currentStage=2108)
-    s5, keep5, _ = make_clear_sample(gd, save, anchor5, cur3, 2000)
-    check("amostra: estagio diferente -> re-ancora",
-          s5 is None and keep5 is False)
-    # relogio por playTime: 90s de playTime / 3 clears = 30s (lastSavedTime nao muda)
-    a_pt = dict(anchor3, playTime=1000, lastSavedTime=0)
-    c_pt = dict(cur, playTime=1090, lastSavedTime=0, gold=0, totalClears=103,
-                totalKills=50000 + round(3 * kills))
-    s_pt, _, _ = make_clear_sample(gd, save, a_pt, c_pt, 2000)
-    check("amostra: dt usa playTime (90s/3 = 30s)",
-          s_pt and abs(s_pt["clearSec"] - 30) < 0.5, f"got {s_pt}")
-
-
 def t_econ_scale(gd, save):
     # econScale REMOVIDO: usa reward dataminado cru (igual a wiki), ignora kpc
     econ = gd.stage_econ(2109)
@@ -309,7 +249,8 @@ def t_api():
                                     timeout=5) as r:
             d = json.loads(r.read())
         check("API viva: snapshot completo",
-              all(k in d for k in ("status", "state", "sim", "history", "samples")))
+              all(k in d for k in ("status", "state", "sim", "history",
+                                   "manualSamples")))
         with urllib.request.urlopen("http://127.0.0.1:8423/", timeout=5) as r:
             html = r.read().decode()
         check("API viva: serve o frontend React", "/assets/index" in html)
@@ -328,7 +269,6 @@ if __name__ == "__main__":
     t_fit_factor()
     gd = GameData(ROOT / "gamedata")
     save = t_real_save(gd)
-    t_sample_derivation(gd, save)
     t_econ_scale(gd, save)
     t_projection(gd)
     t_offline(gd)

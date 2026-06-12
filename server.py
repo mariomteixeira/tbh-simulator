@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import tbh_tracker as core
-from simulator import GameData, simulate, make_clear_sample
+from simulator import GameData, simulate
 from store import Store
 
 ROOT = Path(__file__).parent
@@ -65,9 +65,6 @@ class SaveWatcher:
         self.sim_error = None
         self.error = None
         self.last_read = None      # epoch da ultima leitura ok
-        self.sample_anchor = None   # save onde a janela de medicao abriu
-        self.sample_aligned = False  # janela atual comeca no fim de uma run?
-        self.sample_log = []        # decisoes de janela (auditoria na aba Modelo)
 
         self.gamedata = None
         self.gamedata_error = None
@@ -153,67 +150,25 @@ class SaveWatcher:
         })
 
         # simulacao fora do lock (le tabelas proprias, nao o estado compartilhado)
+        # NOTA: a amostragem automatica de tempo de clear foi REMOVIDA — ela
+        # derivava do totalClears do save, que conta varias vezes por run e
+        # gerava "medidas" ~5x menores que a realidade. A unica fonte de tempo
+        # agora e a calibracao manual (cronometrada), que bate com o jogo.
         sim, sim_error = None, None
         if self.gamedata:
             try:
                 sim = simulate(self.gamedata, inner, measured,
-                               samples=self._all_samples(),
-                               stage_stats=self.store.stage_stats())
+                               samples=self._all_samples())
             except Exception as e:
                 sim_error = f"simulador falhou: {e}"
-
-        # janela de medicao de clears: abre ao entrar num mapa e fecha quando
-        # o contador de runs do save avanca (runs longas atravessam varios
-        # saves sem problema)
-        if sim:
-            try:
-                anchor = self.sample_anchor
-                if (anchor is None
-                        or state.get("currentStage") != anchor.get("currentStage")):
-                    self.sample_anchor = state
-                    self.sample_aligned = False
-                    self._log_sample({"why": "janela aberta (alinhando no fim da run)",
-                                      "stage": state.get("currentStage")})
-                elif state["lastSavedTime"] != anchor["lastSavedTime"]:
-                    sample, keep, info = make_clear_sample(
-                        self.gamedata, inner, anchor, state, sim["party"]["dps"])
-                    if sample and not self.sample_aligned:
-                        # 1a janela apos entrar no mapa pode ter comecado no
-                        # meio de uma run: serve so para alinhar o relogio
-                        info["why"] = "alinhado no fim da run (janela descartada)"
-                        self._log_sample(info)
-                        self.sample_anchor = state
-                        self.sample_aligned = True
-                    elif sample:
-                        self._log_sample(info)
-                        self.store.add_sample(sample)
-                        if info.get("killsPorRun"):
-                            self.store.add_stage_obs(
-                                sample["stage"], info["killsPorRun"],
-                                sample["clears"])
-                        self.sample_anchor = state
-                    elif not keep:
-                        self._log_sample(info)
-                        self.sample_anchor = state
-                        self.sample_aligned = False
-                    elif "acumulando" not in info.get("why", ""):
-                        self._log_sample(info)
-            except Exception as e:
-                self._log_sample({"why": f"erro na amostragem: {e}"})
 
         with self.lock:
             self.sim = sim if sim else self.sim
             self.sim_error = sim_error
 
-    def _log_sample(self, info: dict):
-        with self.lock:
-            self.sample_log.append({"ts": time.time(), **info})
-            if len(self.sample_log) > 50:
-                self.sample_log = self.sample_log[-50:]
-
-    # -- amostras (auto + manual) e re-simulacao sob demanda -----------------
+    # -- amostras (so manuais) e re-simulacao sob demanda ---------------------
     def _all_samples(self):
-        return self.store.samples() + self.store.manual_samples()
+        return self.store.manual_samples()
 
     def resimulate(self):
         """Re-roda a simulacao com as amostras atuais, sem esperar o proximo
@@ -228,8 +183,7 @@ class SaveWatcher:
             measured = self._measured()
         try:
             sim = simulate(self.gamedata, inner, measured,
-                           samples=self._all_samples(),
-                           stage_stats=self.store.stage_stats())
+                           samples=self._all_samples())
             with self.lock:
                 self.sim, self.sim_error = sim, None
         except Exception as e:
@@ -254,9 +208,7 @@ class SaveWatcher:
                 "sessionRates": self.session_rates,
                 "sim": self.sim,
                 "history": self.store.history()[-HISTORY_MAX:],
-                "samples": self.store.samples()[-50:],
                 "manualSamples": self.store.manual_samples(),
-                "sampleLog": self.sample_log[-20:],
             }
 
 
