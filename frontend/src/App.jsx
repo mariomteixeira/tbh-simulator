@@ -11,11 +11,13 @@ import OfflinePanel from "./components/OfflinePanel.jsx";
 import GoldChart from "./components/GoldChart.jsx";
 import ProjectionChart from "./components/ProjectionChart.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
+import RunesPage from "./components/RunesPage.jsx";
 
 const ROUTES = [
   { id: "overview", hash: "#/", label: "Visão geral", group: "Painel" },
   { id: "farm", hash: "#/farm", label: "Farm", group: "Painel" },
   { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel" },
+  { id: "runes", hash: "#/runas", label: "Runas", group: "Painel" },
   { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel" },
   { id: "offline", hash: "#/offline", label: "Offline", group: "Painel" },
   { id: "model", hash: "#/modelo", label: "Modelo & Calibração", group: "Sistema" },
@@ -336,6 +338,8 @@ export default function App() {
 
         {!st ? (
           <div className="loading">aguardando primeira leitura do save…</div>
+        ) : route.id === "runes" ? (
+          <RunesPage key="runes" runes={sim?.runes} />
         ) : (
           <main
             key={route.id}

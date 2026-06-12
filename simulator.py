@@ -849,6 +849,157 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
 
 
 # ---------------------------------------------------------------------------
+# Conselheiro de runas (arvore + ganho real por compra)
+# ---------------------------------------------------------------------------
+GOLD_KEY = 100001  # chave da moeda gold (currenySaveDatas / CostItemKey)
+
+
+def rune_advisor(gd: GameData, save: dict, runes: dict, *, fielded_saves,
+                 ref_level, ref_hit, elements, cur_eff, ct,
+                 gold_ph, exp_ph, gold_mult, exp_mult,
+                 drop_n_mult, drop_b_mult, t_wave, gold_now):
+    """Arvore de runas com estado do save + ganho estimado da PROXIMA compra.
+
+    Combate (AllHero*): recalcula DPS/EHP do time de verdade com o stat da
+    proxima compra aplicado. Farm (gold/exp/baus/offline/wave): ganho analitico
+    sobre as taxas do estagio atual. QoL/desbloqueio: sem numero, so rotulo.
+    """
+    levels = {rs.get("RuneKey"): rs.get("Level") or 0
+              for rs in save.get("RuneSaveData") or []}
+
+    def party_power(rdict):
+        dps, ehp_min = 0.0, None
+        for hs in fielded_saves:
+            stats = collect_hero(gd, save, hs, rdict)
+            dps += hero_damage(gd, save, hs, stats)["dps"]
+            e = hero_ehp(stats, ref_level, ref_hit, elements)
+            ehp_min = e if ehp_min is None else min(ehp_min, e)
+        return dps, (ehp_min or 0.0)
+
+    dps0, ehp0 = party_power(runes) if fielded_saves else (0.0, 0.0)
+
+    # flats atuais por tipo (denominador dos ganhos de farm)
+    def flat_total(kind):
+        if not cur_eff:
+            return 0.0
+        return (runes.get(f"Additional{kind}", 0) * cur_eff["kills"]
+                + runes.get(f"Additional{kind}NormalMonster", 0) * cur_eff["nNormal"]
+                + runes.get(f"Additional{kind}StageBoss", 0) * cur_eff["nStageBoss"]
+                + runes.get(f"Additional{kind}ActBoss", 0) * cur_eff["nActBoss"])
+
+    FLAT_COUNT = {"": "kills", "NormalMonster": "nNormal",
+                  "StageBoss": "nStageBoss", "ActBoss": "nActBoss"}
+
+    def gain_for(st, v):
+        """(kind, pct, label) do proximo nivel; pct None = QoL sem numero."""
+        if _rune_to_hero_stat(st):
+            r2 = dict(runes)
+            r2[st] = r2.get(st, 0) + v
+            dps1, ehp1 = party_power(r2)
+            dps_pct = (dps1 / dps0 - 1) * 100 if dps0 else 0.0
+            ehp_pct = (ehp1 / ehp0 - 1) * 100 if ehp0 else 0.0
+            if abs(dps_pct) >= abs(ehp_pct):
+                return "combate", dps_pct, f"+{dps_pct:.2f}% DPS do time"
+            return "combate", ehp_pct, f"+{ehp_pct:.2f}% EHP do time"
+        if st == "IncreaseGoldAmount":
+            cur = runes.get(st, 0)
+            pct = (PCT + cur + v) / (PCT + cur) * 100 - 100
+            return "farm", pct, f"+{pct:.2f}% gold/h"
+        if st == "IncreaseExpAmount":
+            cur = runes.get(st, 0)
+            pct = (PCT + cur + v) / (PCT + cur) * 100 - 100
+            return "farm", pct, f"+{pct:.2f}% exp/h"
+        for kind, ph in (("Gold", gold_ph), ("Exp", exp_ph)):
+            if st.startswith(f"Additional{kind}"):
+                if not cur_eff or not ct or not ph:
+                    return "farm", None, "gold/exp flat por kill"
+                cnt = cur_eff[FLAT_COUNT[st[len(f"Additional{kind}"):]]]
+                base = (cur_eff["gold"] if kind == "Gold" else cur_eff["exp"])
+                mult = gold_mult if kind == "Gold" else exp_mult
+                denom = base * mult + flat_total(kind)
+                pct = (v * cnt) / denom * 100 if denom > 0 else None
+                lab = "gold/h" if kind == "Gold" else "exp/h"
+                return "farm", pct, (f"+{pct:.2f}% {lab} (fase atual)"
+                                     if pct is not None else lab)
+        if st in ("DropChanceNormalChestPercent", "DropChanceStageBossChestPercent"):
+            cur_mult = drop_n_mult if st.startswith("DropChanceNormal") else drop_b_mult
+            tipo = "normal" if st.startswith("DropChanceNormal") else "do boss"
+            pct = (cur_mult + v / PCT) / cur_mult * 100 - 100
+            return "farm", pct, f"+{pct:.2f}% baús {tipo}/h"
+        if st in ("OfflineRewardGoldPercent", "OfflineRewardExpPercent"):
+            cur = runes.get(st, 0)
+            pct = (PCT + cur + v) / (PCT + cur) * 100 - 100
+            que = "gold" if "Gold" in st else "exp"
+            return "farm", pct, f"+{pct:.2f}% {que} offline"
+        if st == "WaveCountReduction":
+            if not ct or not t_wave:
+                return "farm", None, "-1 wave por run"
+            saved = t_wave * v
+            pct = saved / max(ct - saved, 1) * 100
+            return "farm", pct, f"-{v} wave (~+{pct:.1f}% nas taxas)"
+        return "qol", None, "desbloqueio / utilidade"
+
+    # pais: quem aponta pra quem (NextRuneKey = filhos)
+    parent = {}
+    for r in gd.runes.values():
+        nk = r.get("NextRuneKey")
+        if nk:
+            for c in str(nk).split():
+                parent[int(c)] = r["RuneKey"]
+
+    nodes, edges, recs = [], [], []
+    for r in gd.runes.values():
+        key = r["RuneKey"]
+        lv = levels.get(key, 0)
+        mx = r.get("MaxLevel") or 1
+        rows = gd.rune_levels.get(r["LevelDataKey"]) or {}
+        req = r.get("PrevNodeRequiredLevel") or 1
+        par = parent.get(key)
+        unlocked = par is None or levels.get(par, 0) >= req
+        nxt = rows.get(lv + 1) if lv < mx else None
+        st = (rows.get(1) or {}).get("STATTYPE")
+        total = sum((rows.get(L) or {}).get("Value") or 0 for L in range(1, lv + 1))
+
+        gain = None
+        if nxt and unlocked:
+            kind, pct, label = gain_for(nxt["STATTYPE"], nxt["Value"] or 0)
+            cost = nxt.get("CostValue") or 0
+            gain = {"kind": kind, "pct": round(pct, 3) if pct is not None else None,
+                    "label": label, "cost": cost,
+                    "affordable": cost <= (gold_now or 0)}
+            if pct is not None and pct > 0 and cost > 0:
+                recs.append({"key": key, "name": _name(r.get("NameKey_i18n")),
+                             "icon": r.get("IconPath"), "kind": kind,
+                             "pct": round(pct, 3), "label": label, "cost": cost,
+                             "level": lv + 1, "affordable": cost <= (gold_now or 0),
+                             "score": pct / cost})
+        nodes.append({
+            "key": key, "name": _name(r.get("NameKey_i18n")),
+            "icon": r.get("IconPath"), "stat": st,
+            "level": lv, "max": mx, "req": req,
+            "unlocked": unlocked, "owned": lv > 0, "maxed": lv >= mx,
+            "nextCost": (nxt or {}).get("CostValue"),
+            "nextValue": (nxt or {}).get("Value"),
+            "perLevel": [{"level": L, "cost": (rows.get(L) or {}).get("CostValue"),
+                          "value": (rows.get(L) or {}).get("Value")}
+                         for L in range(1, mx + 1)],
+            "total": total, "gain": gain,
+        })
+        if par is not None:
+            edges.append({"from": par, "to": key, "req": req})
+
+    recs.sort(key=lambda x: x["score"], reverse=True)
+    return {
+        "nodes": nodes, "edges": edges,
+        "gold": gold_now,
+        "recommendations": {
+            "combate": [x for x in recs if x["kind"] == "combate"][:6],
+            "farm": [x for x in recs if x["kind"] == "farm"][:6],
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Penalidade de exp por over-level
 # ---------------------------------------------------------------------------
 def fit_factor(party_level: int, stage_lvl: int) -> float:
@@ -1196,6 +1347,21 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     gear = gear_advisor(gd, save, fielded_saves, runes, ref_level, ref_hit,
                         cur_econ["elements"] if cur_econ else None)
 
+    # --- arvore de runas + recomendacao de compra
+    gold_now = next((c.get("Quantity") for c in save.get("currenySaveDatas") or []
+                     if c.get("Key") == GOLD_KEY), 0)
+    runes_tree = rune_advisor(
+        gd, save, runes,
+        fielded_saves=fielded_saves, ref_level=ref_level, ref_hit=ref_hit,
+        elements=cur_econ["elements"] if cur_econ else None,
+        cur_eff=cur_eff,
+        ct=cur_row["clearTime"] if cur_row else None,
+        gold_ph=cur_row["goldPerHour"] if cur_row else None,
+        exp_ph=cur_row["expPerHour"] if cur_row else None,
+        gold_mult=gold_mult, exp_mult=exp_mult,
+        drop_n_mult=drop_n_mult, drop_b_mult=drop_b_mult,
+        t_wave=t_wave, gold_now=gold_now)
+
     result = {
         "heroes": heroes,
         "party": {"dps": party_dps, "ehpMin": party_ehp_min,
@@ -1211,6 +1377,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "projection": projection,
         "offline": offline,
         "gear": gear,
+        "runes": runes_tree,
         "econScale": {"global": round(global_scale, 3),
                       "stages": {str(k): round(v, 3) for k, v in scales.items()}},
     }

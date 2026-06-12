@@ -159,6 +159,21 @@ def t_real_save(gd):
     bb = r["farm"]["bestBossBox"]
     check("simulate: rota de bau do boss e fase LIMPA com perHour>0",
           bb and bb["cleared"] and bb["bossBoxPerHour"] > 0 and bb["bossBox"])
+    rt = r["runes"]
+    check("runas: arvore completa (197 nos)", len(rt["nodes"]) == 197,
+          f"got {len(rt['nodes'])}")
+    levels = {x["RuneKey"]: x.get("Level") or 0 for x in save["RuneSaveData"]}
+    parent = {}
+    for rn in gd.runes.values():
+        for c in str(rn.get("NextRuneKey") or "").split():
+            parent[int(c)] = rn["RuneKey"]
+    bad = [n["key"] for n in rt["nodes"]
+           if n["unlocked"] and parent.get(n["key"]) is not None
+           and levels.get(parent[n["key"]], 0) < n["req"]]
+    check("runas: unlock respeita nivel do pai", not bad, f"violacoes: {bad}")
+    allrec = rt["recommendations"]["combate"] + rt["recommendations"]["farm"]
+    check("runas: recomendacoes com custo e ganho positivos",
+          all(x["cost"] > 0 and x["pct"] > 0 for x in allrec))
     check("simulate: coach tem texto", len(r["coach"]) >= 3)
     check("simulate: offline park so em fase limpa",
           r["offline"]["park"] is None or any(

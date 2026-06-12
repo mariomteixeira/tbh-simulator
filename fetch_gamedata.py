@@ -43,6 +43,36 @@ EXTRA = {
     "stat_strings": "https://taskbarhero.wiki/data/stat_strings.json",
 }
 
+# Icones das runas (PNG da wiki, fan-made/comunidade) -> gamedata/icons/runes/
+RUNE_ICON_URL = "https://taskbarhero.wiki/game/runes/{}.png"
+
+
+def fetch_rune_icons(out_dir: Path, force: bool = False):
+    """Baixa o icone de cada runa (39 IconPaths distintos)."""
+    runes_file = out_dir / "runes.json"
+    if not runes_file.exists():
+        print("[aviso] runes.json ainda nao baixado; pulando icones", file=sys.stderr)
+        return 0, []
+    icons_dir = out_dir / "icons" / "runes"
+    icons_dir.mkdir(parents=True, exist_ok=True)
+    runes = json.loads(runes_file.read_text(encoding="utf-8-sig"))
+    paths = sorted({r.get("IconPath") for r in runes if r.get("IconPath")})
+    ok, failed = 0, []
+    for p in paths:
+        dest = icons_dir / f"{p}.png"
+        if dest.exists() and not force:
+            continue
+        try:
+            dest.write_bytes(fetch(RUNE_ICON_URL.format(p)))
+            ok += 1
+            time.sleep(0.2)
+        except Exception as e:
+            print(f"[erro] icone {p}: {e}", file=sys.stderr)
+            failed.append(p)
+    if ok:
+        print(f"[ok]   icones de runas: {ok} baixados em {icons_dir}")
+    return ok, failed
+
 # O site bloqueia user-agents nao-navegador (403)
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
@@ -77,6 +107,9 @@ def main():
         except Exception as e:
             print(f"[erro] {table}: {e}", file=sys.stderr)
             failed.append(table)
+
+    _, icon_failed = fetch_rune_icons(OUT_DIR, force=args.force)
+    failed += icon_failed
 
     print(f"\n{ok} baixadas, {skipped} ja existiam, {len(failed)} falharam")
     if failed:

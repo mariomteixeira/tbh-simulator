@@ -310,6 +310,11 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
               if (static_dir / "assets").exists()
               else StaticFiles(directory=static_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    # icones das runas (baixados pela fetch_gamedata; fan-made, taskbarhero.wiki)
+    rune_icons = GAMEDATA_DIR / "icons" / "runes"
+    if rune_icons.exists():
+        app.mount("/runeicons", StaticFiles(directory=rune_icons), name="runeicons")
     return app
 
 
