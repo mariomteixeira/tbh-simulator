@@ -55,7 +55,7 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
 
   return (
     <div className="model-grid">
-      <div className="card">
+      <section className="sec">
         <h2>Calibrar tempo de clear (manual)</h2>
         <p className="muted small">
           Cronometre uma run e digite o tempo <b>em segundos</b>. Vale como
@@ -111,9 +111,9 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="sec">
         <h2>Estado da calibração</h2>
         <div className="model-stats">
           <div className="kv-big">
@@ -143,9 +143,9 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
           manuais; o contador de "clears" do save conta várias vezes por run e
           não é usado.
         </p>
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="sec">
         <h2>Previsto × medido (por estágio)</h2>
         {comparison.length === 0 ? (
           <p className="muted small">
@@ -176,9 +176,9 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="sec">
         <h2>Amostras recentes</h2>
         {recent.length === 0 ? (
           <p className="muted small">nenhuma ainda</p>
@@ -204,9 +204,9 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="sec">
         <h2>Decisões de janela (auditoria)</h2>
         {!sampleLog?.length ? (
           <p className="muted small">nenhuma decisão registrada ainda</p>
@@ -238,9 +238,9 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="sec">
         <h2>Como o tempo é medido</h2>
         <ul className="method-list">
           <li>
@@ -268,7 +268,7 @@ export default function ModelTab({ sim, samples, manualSamples, sampleLog }) {
             contínuo e o rendimento por hora não se aplica.
           </li>
         </ul>
-      </div>
+      </section>
     </div>
   );
 }

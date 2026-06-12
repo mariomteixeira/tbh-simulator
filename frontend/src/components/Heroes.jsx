@@ -9,7 +9,7 @@ export default function Heroes({ sim, state, rates }) {
   const expRates = rates?.exp_per_hour || {};
 
   return (
-    <div className="card">
+    <section className="sec">
       <h2>Time</h2>
       <div className="hero-list">
         {sim.heroes.map((h) => (
@@ -49,6 +49,6 @@ export default function Heroes({ sim, state, rates }) {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

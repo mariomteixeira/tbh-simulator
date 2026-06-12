@@ -33,9 +33,9 @@ export default function GoldChart({ history }) {
     );
   }
   return (
-    <div className="card chart-card">
+    <section className="sec">
       <h2>Gold (histórico)</h2>
       {body}
-    </div>
+    </section>
   );
 }

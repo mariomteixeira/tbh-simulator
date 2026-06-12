@@ -10,7 +10,7 @@ function Elem({ el }) {
 
 export default function DamagePanel({ heroes }) {
   return (
-    <div className="card">
+    <section className="sec">
       <h2>Dano real — por skill</h2>
       <p className="muted small dmg-note">
         O painel de Status do jogo mostra só o ataque básico, sem bônus
@@ -59,6 +59,6 @@ export default function DamagePanel({ heroes }) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

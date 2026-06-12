@@ -4,15 +4,15 @@ import { fmt } from "../format.js";
 export default function OfflinePanel({ offline }) {
   if (!offline.unlocked) {
     return (
-      <div className="card">
+      <section className="sec">
         <h2>Offline</h2>
         <p className="muted">Recompensa offline ainda não desbloqueada (runa).</p>
-      </div>
+      </section>
     );
   }
   const { park, current } = offline;
   return (
-    <div className="card">
+    <section className="sec">
       <h2>Offline (cap {offline.capHours}h)</h2>
       {park && (
         <div className="park">
@@ -33,6 +33,6 @@ export default function OfflinePanel({ offline }) {
           runas: +{offline.goldBonusPct}% gold, +{offline.expBonusPct}% exp
         </p>
       )}
-    </div>
+    </section>
   );
 }

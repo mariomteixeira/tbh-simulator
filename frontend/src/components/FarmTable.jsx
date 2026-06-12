@@ -46,8 +46,8 @@ export default function FarmTable({ farm }) {
     setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }));
 
   return (
-    <div className="card">
-      <div className="card-head">
+    <section className="sec">
+      <div className="sec-head">
         <h2>Farm — taxas reais por estágio</h2>
         <div className="chips">
           {DIFFS.map((dd) => (
@@ -102,6 +102,6 @@ export default function FarmTable({ farm }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }

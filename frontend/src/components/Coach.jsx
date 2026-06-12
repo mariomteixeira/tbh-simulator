@@ -4,7 +4,7 @@ export default function Coach({ paragraphs }) {
   if (!paragraphs?.length) return null;
   const [first, ...rest] = paragraphs;
   return (
-    <div className="card coach">
+    <section className="sec coach">
       <h2>Copilot recomenda</h2>
       <p className="coach-lead">{first}</p>
       <ul className="coach-list">
@@ -12,6 +12,6 @@ export default function Coach({ paragraphs }) {
           <li key={i}>{p}</li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

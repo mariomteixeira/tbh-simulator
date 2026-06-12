@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSnapshot } from "./useSnapshot.js";
-import { fmt, fmtHours, timeAgo } from "./format.js";
+import { fmt, fmtDur, fmtHours, timeAgo } from "./format.js";
 import ModelTab from "./components/ModelTab.jsx";
 import Coach from "./components/Coach.jsx";
 import FarmTable from "./components/FarmTable.jsx";
@@ -12,30 +12,257 @@ import GoldChart from "./components/GoldChart.jsx";
 import ProjectionChart from "./components/ProjectionChart.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 
-function StatCard({ label, value, sub, accent }) {
+const ROUTES = [
+  { id: "overview", hash: "#/", label: "Visão geral", group: "Painel" },
+  { id: "farm", hash: "#/farm", label: "Farm", group: "Painel" },
+  { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel" },
+  { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel" },
+  { id: "offline", hash: "#/offline", label: "Offline", group: "Painel" },
+  { id: "model", hash: "#/modelo", label: "Modelo & Calibração", group: "Sistema" },
+];
+
+function useRoute() {
+  const find = () =>
+    ROUTES.find((r) => r.hash === (window.location.hash || "#/")) || ROUTES[0];
+  const [route, setRoute] = useState(find);
+  useEffect(() => {
+    const on = () => setRoute(find());
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return route;
+}
+
+/* ---------- blocos do rail (coluna direita) ---------- */
+function RailRows({ title, rows }) {
+  const visible = rows.filter((r) => r);
+  if (!visible.length) return null;
   return (
-    <div className="card stat">
-      <span className="stat-label">{label}</span>
-      <span className={"stat-value" + (accent ? " " + accent : "")}>{value}</span>
-      <span className="stat-sub">{sub}</span>
+    <div>
+      <h3>{title}</h3>
+      <div className="rail-rows">
+        {visible.map(([label, value, cls], i) => (
+          <div className="rail-row" key={i}>
+            <i>{label}</i>
+            <b className={cls || ""}>{value}</b>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-export default function App() {
-  const { data: d, online } = useSnapshot();
-  const [tab, setTab] = useState("painel");
-  const st = d?.state;
-  const sim = d?.sim;
-  const status = d?.status;
+function StageRef({ r }) {
+  if (!r) return null;
+  return (
+    <span>
+      <span className={"diff-tag t-" + r.tag}>{r.tag}</span> {r.label}
+    </span>
+  );
+}
 
-  const sr = d?.sessionRates;
+/* ---------- páginas ---------- */
+function Overview({ d, sim, st, sr }) {
   const goldRate =
     sr && sr.dt_hours > 0
       ? sr.gold_per_hour === null
         ? "gold gasto na sessão"
-        : fmt(sr.gold_per_hour) + "/h na sessão"
+        : fmt(sr.gold_per_hour) + "/h líquido"
       : "aguardando 2º save…";
+  const expSession = sr?.exp_per_hour
+    ? Object.values(sr.exp_per_hour).reduce((a, b) => a + (b || 0), 0)
+    : null;
+  return {
+    main: (
+      <>
+        <div className="kpis">
+          <div className="kpi">
+            <span className="kpi-label">Gold</span>
+            <span className="kpi-value gold">{fmt(st.gold)}</span>
+            <span className="kpi-sub">{goldRate}</span>
+          </div>
+          <div className="kpi">
+            <span className="kpi-label">DPS do time</span>
+            <span className="kpi-value">{sim ? fmt(sim.party.dps) : "—"}</span>
+            <span className="kpi-sub">{sim ? sim.calibration.source : "—"}</span>
+          </div>
+          <div className="kpi">
+            <span className="kpi-label">Estágio</span>
+            <span className="kpi-value">{st.currentStage}</span>
+            <span className="kpi-sub">máx concluído {st.maxStage}</span>
+          </div>
+          <div className="kpi">
+            <span className="kpi-label">Tempo de jogo</span>
+            <span className="kpi-value">{(st.playTime / 3600).toFixed(1)}h</span>
+            <span className="kpi-sub">
+              {sr && sr.dt_hours > 0
+                ? "sessão: " + fmtHours(sr.dt_hours)
+                : "sessão começando"}
+            </span>
+          </div>
+        </div>
+        {sim?.coach && <Coach paragraphs={sim.coach} />}
+        <div className="charts-duo">
+          <GoldChart history={d.history} />
+          {sim?.projection?.length > 0 && (
+            <ProjectionChart projection={sim.projection} />
+          )}
+        </div>
+      </>
+    ),
+    rail: (
+      <>
+        <RailRows
+          title="Sessão"
+          rows={[
+            ["gold/h", sr?.gold_per_hour != null ? fmt(sr.gold_per_hour) : "—", "v-gold"],
+            ["exp/h", expSession ? fmt(expSession) : "—", "v-exp"],
+            ["medida em", sr?.dt_hours > 0 ? fmtHours(sr.dt_hours) : "—"],
+          ]}
+        />
+        {sim && (
+          <RailRows
+            title="Bônus ativos"
+            rows={[
+              ["gold", "+" + sim.goldBonusPct + "%", "v-gold"],
+              ["exp", "+" + sim.expBonusPct + "%", "v-exp"],
+              sim.farm?.dropBonus && ["bau normal", "+" + sim.farm.dropBonus.normal + "%"],
+              sim.farm?.dropBonus && ["bau do boss", "+" + sim.farm.dropBonus.boss + "%"],
+            ]}
+          />
+        )}
+        {sim?.offline?.park && (
+          <div>
+            <h3>Estacionar offline</h3>
+            <div className="park">
+              <div className="park-stage">
+                <StageRef r={sim.offline.park} /> {sim.offline.park.name}
+              </div>
+              <div className="park-yield">
+                <span className="v-gold">{fmt(sim.offline.park.gold)}</span> ·{" "}
+                <span className="v-exp">{fmt(sim.offline.park.exp)}</span> em 8h
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    ),
+  };
+}
+
+function FarmPage({ sim }) {
+  const f = sim?.farm;
+  const cur = f?.current;
+  return {
+    main: f ? <FarmTable farm={f} /> : null,
+    rail: f && (
+      <>
+        <RailRows
+          title="Recomendações"
+          rows={[
+            f.bestGold && ["melhor gold", <StageRef r={f.bestGold} />],
+            f.bestExp && ["melhor exp", <StageRef r={f.bestExp} />],
+            f.push && ["push", <StageRef r={f.push} />],
+          ]}
+        />
+        {cur && (
+          <RailRows
+            title="Estágio atual"
+            rows={[
+              ["fase", <StageRef r={cur} />],
+              ["clear previsto", fmtDur(cur.clearTime)],
+              ["gold/h", fmt(cur.goldPerHour), "v-gold"],
+              ["exp/h", fmt(cur.expPerHour), "v-exp"],
+              ["risco", cur.rating],
+            ]}
+          />
+        )}
+      </>
+    ),
+  };
+}
+
+function BoxesPage({ sim }) {
+  const f = sim?.farm;
+  return {
+    main: f ? <BoxPanel farm={f} /> : null,
+    rail: f && (
+      <>
+        {f.bestBossBox && (
+          <RailRows
+            title="Bau do boss (azul)"
+            rows={[
+              ["melhor fase", <StageRef r={f.bestBossBox} />],
+              ["por hora", f.bestBossBox.bossBoxPerHour.toFixed(1)],
+              ["1 a cada", fmtDur(f.bestBossBox.secsPerBossBox)],
+            ]}
+          />
+        )}
+        {f.bestNormalBox && (
+          <RailRows
+            title="Bau normal"
+            rows={[
+              ["melhor fase", <StageRef r={f.bestNormalBox} />],
+              ["por hora", fmt(f.bestNormalBox.normalBoxPerHour)],
+            ]}
+          />
+        )}
+        {f.dropBonus && (
+          <RailRows
+            title="Seus bônus"
+            rows={[
+              ["bau normal", "+" + f.dropBonus.normal + "%"],
+              ["bau do boss", "+" + f.dropBonus.boss + "%"],
+            ]}
+          />
+        )}
+      </>
+    ),
+  };
+}
+
+function HeroesPage({ d, sim, st }) {
+  return {
+    main: (
+      <>
+        {sim?.heroes?.length > 0 && <DamagePanel heroes={sim.heroes} />}
+        {sim?.gear && <GearPanel gear={sim.gear} />}
+      </>
+    ),
+    rail: sim && (
+      <div className="rail-hero">
+        <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />
+      </div>
+    ),
+  };
+}
+
+function OfflinePage({ sim }) {
+  return { main: sim?.offline ? <OfflinePanel offline={sim.offline} /> : null, rail: null };
+}
+
+function ModelPage({ d, sim }) {
+  return {
+    main: sim ? (
+      <ModelTab
+        sim={sim}
+        samples={d.samples}
+        manualSamples={d.manualSamples}
+        sampleLog={d.sampleLog}
+      />
+    ) : null,
+    rail: null,
+  };
+}
+
+/* ---------- shell ---------- */
+export default function App() {
+  const { data: d, online } = useSnapshot();
+  const route = useRoute();
+  const st = d?.state;
+  const sim = d?.sim;
+  const status = d?.status;
+  const sr = d?.sessionRates;
 
   const msgs = [];
   if (status) {
@@ -45,121 +272,84 @@ export default function App() {
     if (status.simError) msgs.push(status.simError);
   }
 
+  let page = { main: null, rail: null };
+  if (st) {
+    if (route.id === "overview") page = Overview({ d, sim, st, sr });
+    else if (route.id === "farm") page = FarmPage({ sim });
+    else if (route.id === "boxes") page = BoxesPage({ sim });
+    else if (route.id === "heroes") page = HeroesPage({ d, sim, st });
+    else if (route.id === "offline") page = OfflinePage({ sim });
+    else if (route.id === "model") page = ModelPage({ d, sim });
+  }
+
+  const groups = [...new Set(ROUTES.map((r) => r.group))];
+
   return (
-    <div className="shell">
-      <header className="topbar">
+    <div className="app">
+      <aside className="sidenav">
         <div className="brand">
           <span className="brand-mark">TBH</span>
           <span className="brand-name">Copilot</span>
-          <nav className="tabs">
-            <button
-              className={"tab" + (tab === "painel" ? " active" : "")}
-              onClick={() => setTab("painel")}
-            >
-              Painel
-            </button>
-            <button
-              className={"tab" + (tab === "modelo" ? " active" : "")}
-              onClick={() => setTab("modelo")}
-            >
-              Modelo
-            </button>
-          </nav>
         </div>
-        <div className="topbar-right">
-          {status?.lastRead && (
-            <span className="muted">save lido {timeAgo(status.lastRead)}</span>
-          )}
-          <span className={"conn-dot " + (online ? "ok" : "bad")} />
-          <span className="muted">{online ? "conectado" : "sem backend"}</span>
+        <nav className="nav">
+          {groups.map((g) => (
+            <div className="nav-group" key={g}>
+              <div className="nav-group-label">{g}</div>
+              {ROUTES.filter((r) => r.group === g).map((r, i) => (
+                <a
+                  key={r.id}
+                  href={r.hash}
+                  className={"nav-item" + (route.id === r.id ? " active" : "")}
+                >
+                  <span className="idx">
+                    {String(ROUTES.indexOf(r) + 1).padStart(2, "0")}
+                  </span>
+                  {r.label}
+                </a>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="side-foot">
+          <span>
+            <span className={"conn-dot " + (online ? "ok" : "bad")} />
+            {online ? "conectado" : "sem backend"}
+          </span>
+          {status?.lastRead && <span>save lido {timeAgo(status.lastRead)}</span>}
+          <span>somente leitura</span>
         </div>
-      </header>
+      </aside>
 
-      {msgs.length > 0 && <div className="banner">{msgs.join(" · ")}</div>}
-
-      {!st ? (
-        <div className="loading">aguardando primeira leitura do save…</div>
-      ) : tab === "modelo" && sim ? (
-        <ModelTab
-          sim={sim}
-          samples={d.samples}
-          manualSamples={d.manualSamples}
-          sampleLog={d.sampleLog}
-        />
-      ) : (
-        <main className="bento">
-          <section className="kpi-strip">
-            <StatCard label="Gold" value={fmt(st.gold)} sub={goldRate} accent="gold" />
-            <StatCard
-              label="DPS do time"
-              value={sim ? fmt(sim.party.dps) : "—"}
-              sub={sim ? sim.calibration.source : "simulador indisponível"}
-            />
-            <StatCard
-              label="Estágio"
-              value={st.currentStage}
-              sub={"máx concluído " + st.maxStage}
-            />
-            <StatCard
-              label="Tempo de jogo"
-              value={(st.playTime / 3600).toFixed(1) + "h"}
-              sub={
-                sr && sr.dt_hours > 0
-                  ? "sessão medida: " + fmtHours(sr.dt_hours)
-                  : "sessão começando"
-              }
-            />
-          </section>
-
-          {sim?.coach && (
-            <div className="cell c-8">
-              <Coach paragraphs={sim.coach} />
-            </div>
-          )}
-          {sim && (
-            <div className="cell c-4">
-              <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />
-            </div>
-          )}
-          {sim && (
-            <div className="cell c-12">
-              <FarmTable farm={sim.farm} />
-            </div>
-          )}
-          {sim?.farm && (
-            <div className="cell c-7">
-              <BoxPanel farm={sim.farm} />
-            </div>
-          )}
-          {sim?.offline && (
-            <div className="cell c-5">
-              <OfflinePanel offline={sim.offline} />
-            </div>
-          )}
-          <div className="cell c-12">
-            <div className="charts-row">
-              <GoldChart history={d.history} />
-              {sim?.projection?.length > 0 && (
-                <ProjectionChart projection={sim.projection} />
-              )}
-            </div>
+      <div className="content">
+        <header className="topbar">
+          <div className="crumb">
+            TBH Copilot <span className="sep">/</span>{" "}
+            <span className="here">{route.label}</span>
           </div>
-          {sim?.gear && (
-            <div className="cell c-6">
-              <GearPanel gear={sim.gear} />
-            </div>
-          )}
-          {sim?.heroes?.length > 0 && (
-            <div className="cell c-6">
-              <DamagePanel heroes={sim.heroes} />
-            </div>
-          )}
-        </main>
-      )}
+          <div className="topbar-right">
+            {st && <span>estágio {st.currentStage}</span>}
+            <span className={"conn-dot " + (online ? "ok" : "bad")} />
+          </div>
+        </header>
 
-      <footer className="foot">
-        somente leitura · o save nunca é tocado · dados: taskbarhero.wiki
-      </footer>
+        {msgs.length > 0 && <div className="banner">{msgs.join(" · ")}</div>}
+
+        {!st ? (
+          <div className="loading">aguardando primeira leitura do save…</div>
+        ) : (
+          <main
+            key={route.id}
+            className={"page" + (page.rail ? "" : " no-rail")}
+          >
+            <div className="main-col">{page.main}</div>
+            {page.rail && <aside className="rail">{page.rail}</aside>}
+          </main>
+        )}
+
+        <footer className="foot">
+          o save nunca é tocado · dados: taskbarhero.wiki
+        </footer>
+      </div>
     </div>
   );
 }

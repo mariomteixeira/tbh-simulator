@@ -27,15 +27,15 @@ export default function GearPanel({ gear }) {
   }
   if (!upgrades.length && !empties.length) {
     return (
-      <div className="card">
+      <section className="sec">
         <h2>Gear</h2>
         <p className="muted">Nenhuma troca melhor no inventário. Tudo otimizado.</p>
-      </div>
+      </section>
     );
   }
   upgrades.sort((a, b) => b.upgrade.dPower - a.upgrade.dPower);
   return (
-    <div className="card">
+    <section className="sec">
       <h2>Gear — trocas que valem</h2>
       <div className="gear-list">
         {upgrades.map((u, i) => (
@@ -84,6 +84,6 @@ export default function GearPanel({ gear }) {
           muito dano flat, e vice-versa.
         </p>
       </div>
-    </div>
+    </section>
   );
 }

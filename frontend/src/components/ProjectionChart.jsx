@@ -20,7 +20,7 @@ export default function ProjectionChart({ projection }) {
   const sy = (l) => H - 18 - ((l - yMin) / (yMax - yMin || 1)) * (H - 30);
 
   return (
-    <div className="card chart-card">
+    <section className="sec">
       <h2>Projeção de nível (24h no ritmo atual)</h2>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="chart">
         {[0, 4, 8, 16, 24].map((h) => (
@@ -63,6 +63,6 @@ export default function ProjectionChart({ projection }) {
           </span>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
