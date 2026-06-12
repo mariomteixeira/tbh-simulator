@@ -613,8 +613,12 @@ button.link:hover { color: var(--color-blood); }
 .rec-name { font-size: .8rem; font-weight: 600; }
 .rec-name em { font-style: normal; color: var(--color-dim); font-family: var(--font-mono); font-size: .7rem; }
 .rec-gain { font-size: .72rem; color: var(--color-cyan); font-family: var(--font-mono); }
-.rec-cost { font-family: var(--font-mono); font-size: .74rem; color: var(--color-dim); }
+.rec-cost { font-family: var(--font-mono); font-size: .74rem; color: var(--color-dim); text-align: right; }
 .rec-cost.ok { color: var(--color-grass); }
+.rec-cost em, .gold-unit {
+  font-style: normal; font-size: .6rem; color: var(--color-gold);
+  text-transform: uppercase; letter-spacing: .06em;
+}
 .rec-step { font-size: .68rem; color: #d65bff; font-family: var(--font-mono); }
 
 /* rota de desbloqueio nos detalhes */

@@ -31,7 +31,7 @@ function RuneNode({ data }) {
   const tip =
     `${n.name} — nv ${n.level}/${n.max}` +
     (n.unlocked
-      ? n.maxed ? " (máxima)" : ` · próx: ${fmt(n.nextCost)}g`
+      ? n.maxed ? " (máxima)" : ` · próx: ${fmt(n.nextCost)} gold`
       : ` (bloqueada, pai nv ${n.req})`);
   return (
     <div className={cls} title={tip}>
@@ -68,7 +68,7 @@ function RecList({ title, recs, onPick, showSteps }) {
               )}
             </span>
             <span className={"rec-cost" + (r.affordable ? " ok" : "")}>
-              {fmt(r.cost)}g
+              {fmt(r.cost)} <em>gold</em>
             </span>
           </button>
         ))}
@@ -109,12 +109,12 @@ function RuneDetails({ n, onPick }) {
                 <span>
                   {s.name} <em>nv{s.fromLevel}→{s.toLevel}</em>
                 </span>
-                <b>{fmt(s.cost)}g</b>
+                <b>{fmt(s.cost)} <em className="gold-unit">gold</em></b>
               </button>
             ))}
             <div className="rd-step total">
               <span>total pra liberar</span>
-              <b className="v-gold">{fmt(n.path.chainCost)}g</b>
+              <b className="v-gold">{fmt(n.path.chainCost)} <em className="gold-unit">gold</em></b>
             </div>
           </div>
         )}
