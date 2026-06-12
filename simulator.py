@@ -1039,15 +1039,17 @@ def project_levels(gd: GameData, level: int, exp_now: float, eps: float,
 # Simulacao completa a partir do save
 # ---------------------------------------------------------------------------
 def simulate(gd: GameData, save: dict, measured: dict | None = None,
-             samples: list | None = None, stage_stats: dict | None = None):
+             samples: list | None = None, stage_stats: dict | None = None,
+             ceiling: int | None = None):
     """Estado de combate do time + tabela de farm com taxas reais.
 
     measured (opcional): taxas medidas entre saves:
       {'goldPerSec': x, 'expPerSec': y, 'expPerHourByHero': {nome: v}}
     samples (opcional): amostras de clear persistidas (store.py) para a
     calibracao por regressao - a melhor fonte de verdade do modelo.
-    stage_stats (opcional): kills/run empiricos por fase (store.py); corrigem
-    a composicao da wiki, que se mostrou inflada em algumas fases.
+    ceiling (opcional): chave da fase mais alta que o jogador FARMA com
+    confianca (o "highest reliable clear" da wiki). Nada acima do teto entra
+    em recomendacao — o jogo libera fases que o jogador ainda nao aguenta.
     """
     measured = measured or {}
 
@@ -1197,6 +1199,8 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     unlocked = set(gd.unlocked_stages(cs.get("maxCompletedStage")))
     max_idx = (gd.stage_order.index(cs.get("maxCompletedStage"))
                if cs.get("maxCompletedStage") in gd.stage_order else -1)
+    ceil_idx = (gd.stage_order.index(ceiling)
+                if ceiling in gd.stage_order else None)
     rows = []
     for key in gd.stage_order:
         if key not in unlocked:
@@ -1227,6 +1231,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "econScale": round(scale_of(key), 3),
             "measuredScale": key in scales,
             "danger": round(danger, 2),
+            "beyondCeiling": ceil_idx is not None and idx > ceil_idx,
             "normalBox": box_label(mbk),
             "bossBox": box_label(bbk),
             "normalBoxLvl": (mbk % 1000) // 10 if mbk else 0,
@@ -1248,25 +1253,27 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         r["rating"] = ("seguro" if rel <= 1.2 else
                        "apertado" if rel <= 2.5 else "arriscado")
 
-    # Recomendacao so entre fases que voce CONSEGUE clearar: nao-ACTBOSS, ja
-    # LIMPAS (a fase seguinte nao-limpa vira "push", nunca recomendacao de farm)
-    # e de preferencia nao "arriscado". Fallbacks pra nunca ficar sem nada.
-    farmable = [r for r in rows if r["type"] != "ACTBOSS"]
+    # Recomendacao so entre fases que voce CONSEGUE farmar: nao-ACTBOSS, ja
+    # LIMPAS, e DENTRO DO TETO (ceiling) se definido — o jogo libera/marca como
+    # "limpa" fase que o jogador passou raspando mas nao aguenta farmar, e o
+    # modelo de perigo (EHP) nao enxerga parede de DPS. O teto e a palavra
+    # final do jogador. Fallbacks pra nunca ficar sem nada.
+    farmable = [r for r in rows
+                if r["type"] != "ACTBOSS" and not r["beyondCeiling"]]
     cleared_farm = [r for r in farmable if r["cleared"]] or farmable
     pool = [r for r in cleared_farm if r["rating"] != "arriscado"] or cleared_farm
     best_gold = max(pool, key=lambda r: r["goldPerHour"], default=None)
     best_exp = max(pool, key=lambda r: r["expPerHour"], default=None)
-    # "push" = proxima fase nao-limpa, mas SO sugere se da pra clearar com folga
-    # (rating "seguro"). Se a proxima esta "apertado"/"arriscado", o jogador nao
-    # esta pronto: nao empurra (evita sugerir fase em que ele esta travado).
-    push = next((r for r in rows if not r["cleared"]), None)
+    # "push" = proxima fase nao-limpa, SO se "seguro" e dentro do teto
+    push = next((r for r in rows
+                 if not r["cleared"] and not r["beyondCeiling"]), None)
     if push and push.get("rating") != "seguro":
         push = None
 
     # rota de baus: como a obtencao e limitada pelo jogo (taxa ~igual em
     # qualquer fase que voce mate rapido), o que importa e o NIVEL do bau:
     # melhor fase limpa = bau de nivel mais alto; clear mais rapido desempata.
-    box_pool = [r for r in rows if r["cleared"] and r["type"] != "ACTBOSS"]
+    box_pool = [r for r in cleared_farm if r["cleared"]]
     best_boss_box = max((r for r in box_pool if r["bossBoxLvl"] > 0),
                         key=lambda r: (r["bossBoxLvl"], -r["clearTime"]),
                         default=None)
@@ -1331,7 +1338,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "goldBonusPct": round((gold_mult - 1) * 100),
         "expBonusPct": round((exp_mult - 1) * 100),
         "farm": {"rows": rows, "current": cur_row, "bestGold": best_gold,
-                 "bestExp": best_exp, "push": push,
+                 "bestExp": best_exp, "push": push, "ceiling": ceiling,
                  "bestBossBox": best_boss_box, "bestNormalBox": best_normal_box,
                  "dropBonus": {"normal": drop_n, "boss": drop_b}},
         "levelEta": eta,

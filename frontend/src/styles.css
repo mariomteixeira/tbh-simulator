@@ -317,6 +317,15 @@ table.mini tr.is-current td { background: rgba(79, 156, 240, .07); }
 .mark.exp  { background: #251a3d; color: #b89bf5; }
 .mark.push { background: #321f29; color: #e08bb0; }
 .mark.boss { background: #2a2a2a; color: #aaa; }
+.mark.beyond { background: #2c1718; color: var(--color-blood); }
+table.farm tr.beyond td { opacity: .45; }
+
+.ceiling-sel {
+  width: 100%; background: var(--color-surface); color: var(--color-fg);
+  border: 1px solid var(--color-edge-2); border-radius: 7px;
+  padding: 8px 10px; font-family: var(--font-body); font-size: .82rem;
+}
+.ceiling-sel:focus { outline: none; border-color: var(--color-gold); }
 
 .rating { font-size: .74rem; font-weight: 650; font-family: var(--font-display); letter-spacing: .04em; }
 .r-seguro { color: var(--color-grass); }

@@ -19,9 +19,12 @@ export default function FarmTable({ farm }) {
   const rows = useMemo(() => {
     // runs de boss de ato nao sao farmaveis em loop: fora da tabela
     let r = (farm.rows || []).filter((x) => x.type !== "ACTBOSS");
-    // por padrao so fases que voce CONSEGUE clearar (limpas) + o push (se houver);
-    // "ver todas" libera as nao-limpas pra referencia
-    if (!all) r = r.filter((x) => x.cleared || x.key === farm.push?.key);
+    // por padrao so fases que voce FARMA (limpas e dentro do teto) + o push;
+    // "ver todas" libera o resto pra referencia
+    if (!all)
+      r = r.filter(
+        (x) => (x.cleared && !x.beyondCeiling) || x.key === farm.push?.key
+      );
     if (diff !== "todas") r = r.filter((x) => x.tag === diff);
     r.sort((a, b) => {
       const va = a[sort.key], vb = b[sort.key];
@@ -81,7 +84,13 @@ export default function FarmTable({ farm }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.key} className={r.current ? "is-current" : ""}>
+            <tr
+              key={r.key}
+              className={
+                (r.current ? "is-current" : "") +
+                (r.beyondCeiling ? " beyond" : "")
+              }
+            >
               <td>
                 <span className={"diff-tag t-" + r.tag}>{r.tag}</span>{" "}
                 <b>{r.label}</b> <span className="muted">{r.name}</span>
@@ -89,6 +98,7 @@ export default function FarmTable({ farm }) {
                 {farm.bestGold?.key === r.key && <span className="mark gold">melhor gold</span>}
                 {farm.bestExp?.key === r.key && <span className="mark exp">melhor exp</span>}
                 {farm.push?.key === r.key && <span className="mark push">push</span>}
+                {r.beyondCeiling && <span className="mark beyond">acima do teto</span>}
                 {r.type === "ACTBOSS" && <span className="mark boss">boss</span>}
               </td>
               <td className="num">{r.lvl}</td>

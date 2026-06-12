@@ -28,13 +28,14 @@ class Store:
         # NOTA: "samples" (auto) e "stageStats" foram REMOVIDOS — derivavam do
         # totalClears do save, que conta varias vezes por run; eram veneno.
         # Arquivos antigos sao migrados: essas chaves sao simplesmente dropadas.
-        self.data = {"history": [], "manualSamples": {}}
+        self.data = {"history": [], "manualSamples": {}, "ceiling": None}
         if self.path.exists():
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
                     self.data["history"] = list(loaded.get("history") or [])
                     self.data["manualSamples"] = dict(loaded.get("manualSamples") or {})
+                    self.data["ceiling"] = loaded.get("ceiling")
             except (OSError, ValueError):
                 pass  # arquivo corrompido: recomeca (os dados sao re-derivaveis)
 
@@ -55,6 +56,17 @@ class Store:
     def manual_samples(self):
         with self.lock:
             return list(self.data["manualSamples"].values())
+
+    # -- teto (ceiling): fase mais alta que o jogador FARMA com confianca -----
+    def set_ceiling(self, stage):
+        """stage = chave da fase, ou None pra limpar."""
+        with self.lock:
+            self.data["ceiling"] = stage
+            self._flush()
+
+    def ceiling(self):
+        with self.lock:
+            return self.data.get("ceiling")
 
     # -- historico de sessao ---------------------------------------------------
     def add_history(self, point: dict):

@@ -167,6 +167,21 @@ def t_real_save(gd):
           bb and bb["cleared"] and bb["bossBoxLvl"] > 0 and bb["bossBox"] and
           bb["bossBoxLvl"] == max(x["bossBoxLvl"] for x in r["farm"]["rows"]
                                   if x["cleared"] and x["type"] != "ACTBOSS"))
+    # teto (ceiling): nada acima dele em recomendacao
+    ceil = 2102  # NM 1-2, bem abaixo do max do save
+    rc = simulate(gd, save, ceiling=ceil)
+    order = gd.stage_order
+    ci = order.index(ceil)
+    f = rc["farm"]
+    above = [x for x in (f["bestGold"], f["bestExp"], f["push"],
+                         f["bestBossBox"], f["bestNormalBox"])
+             if x and order.index(x["key"]) > ci]
+    check("ceiling: nenhuma recomendacao acima do teto", not above,
+          f"acima: {[x['label'] for x in above]}")
+    check("ceiling: linhas acima marcadas beyondCeiling",
+          all(x["beyondCeiling"] == (order.index(x["key"]) > ci)
+              for x in f["rows"]))
+
     rt = r["runes"]
     check("runas: arvore completa (197 nos)", len(rt["nodes"]) == 197,
           f"got {len(rt['nodes'])}")

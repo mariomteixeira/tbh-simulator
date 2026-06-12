@@ -46,6 +46,10 @@ class CalibrationIn(BaseModel):
     clearSec: float     # tempo de uma run EM SEGUNDOS (cronometrado)
 
 
+class CeilingIn(BaseModel):
+    stage: int          # chave da fase mais alta que voce farma com confianca
+
+
 class SaveWatcher:
     """Thread que vigia o save e mantem o ultimo estado pronto para a API."""
 
@@ -158,7 +162,8 @@ class SaveWatcher:
         if self.gamedata:
             try:
                 sim = simulate(self.gamedata, inner, measured,
-                               samples=self._all_samples())
+                               samples=self._all_samples(),
+                               ceiling=self.store.ceiling())
             except Exception as e:
                 sim_error = f"simulador falhou: {e}"
 
@@ -183,7 +188,8 @@ class SaveWatcher:
             measured = self._measured()
         try:
             sim = simulate(self.gamedata, inner, measured,
-                           samples=self._all_samples())
+                           samples=self._all_samples(),
+                           ceiling=self.store.ceiling())
             with self.lock:
                 self.sim, self.sim_error = sim, None
         except Exception as e:
@@ -247,6 +253,20 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
         removed = watcher.store.remove_manual_sample(stage)
         watcher.resimulate()
         return {"ok": True, "removed": removed}
+
+    @app.post("/api/ceiling")
+    def set_ceiling(body: CeilingIn):
+        """Define o teto: a fase mais alta que voce FARMA com confianca.
+        Nada acima dele entra em recomendacao."""
+        watcher.store.set_ceiling(body.stage)
+        watcher.resimulate()
+        return {"ok": True, "ceiling": body.stage}
+
+    @app.delete("/api/ceiling")
+    def del_ceiling():
+        watcher.store.set_ceiling(None)
+        watcher.resimulate()
+        return {"ok": True, "ceiling": None}
 
     # serve o frontend buildado (frontend/dist); cai para o web/ legado
     static_dir = DIST_DIR if (DIST_DIR / "index.html").exists() else WEB_DIR

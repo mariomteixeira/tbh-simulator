@@ -152,6 +152,42 @@ function Overview({ d, sim, st, sr }) {
   };
 }
 
+function CeilingPicker({ farm }) {
+  const opts = (farm.rows || []).filter(
+    (r) => r.cleared && r.type !== "ACTBOSS"
+  );
+  async function set(v) {
+    if (v === "") await fetch("/api/ceiling", { method: "DELETE" });
+    else
+      await fetch("/api/ceiling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: Number(v) }),
+      });
+  }
+  return (
+    <div>
+      <h3>Teto — até onde você farma</h3>
+      <select
+        className="ceiling-sel"
+        value={farm.ceiling ?? ""}
+        onChange={(e) => set(e.target.value)}
+      >
+        <option value="">sem teto (tudo liberado)</option>
+        {opts.map((r) => (
+          <option key={r.key} value={r.key}>
+            {r.tag} {r.label} — {r.name}
+          </option>
+        ))}
+      </select>
+      <p className="muted small" style={{ marginTop: 6 }}>
+        Nada <b>acima do teto</b> entra em recomendação (farm, push ou baús) —
+        mesmo que o jogo já tenha liberado.
+      </p>
+    </div>
+  );
+}
+
 function FarmPage({ sim }) {
   const f = sim?.farm;
   const cur = f?.current;
@@ -159,6 +195,7 @@ function FarmPage({ sim }) {
     main: f ? <FarmTable farm={f} /> : null,
     rail: f && (
       <>
+        <CeilingPicker farm={f} />
         <RailRows
           title="Recomendações"
           rows={[
