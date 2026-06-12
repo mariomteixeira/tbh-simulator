@@ -23,9 +23,10 @@ export default function BoxPanel({ farm }) {
     <div className="card">
       <h2>Baús — rota de drop</h2>
       <p className="muted small">
-        Seus bônus: <b>+{bonus.normal}%</b> bau normal · <b>+{bonus.boss}%</b> bau
-        do boss (azul). O normal cai por kill; o azul, 1 por run (no boss) — por
-        isso ele tem cara de “tempo mínimo”.
+        Taxa por kill (datada na wiki): bau normal <b>16%</b>/kill, bau do boss
+        (azul) <b>15%</b>/boss. Com seus bônus: <b>+{bonus.normal}%</b> normal ·{" "}
+        <b>+{bonus.boss}%</b> boss. “1 a cada” = tempo médio até cair
+        (probabilístico, não timer fixo).
       </p>
 
       {bb && (
@@ -76,8 +77,9 @@ export default function BoxPanel({ farm }) {
       </table>
 
       <p className="muted small" style={{ marginTop: 8 }}>
-        Taxa estimada (per-mille). O <b>ranking entre fases</b> é confiável; o
-        valor absoluto pode precisar de calibração contra o jogo.
+        Taxas da wiki (datadas). Melhor mapa = bau de <b>nível mais alto</b>
+        (gear melhor) e, entre os de mesmo nível, o de <b>clear mais rápido</b>
+        (mais baús/h).
       </p>
     </div>
   );

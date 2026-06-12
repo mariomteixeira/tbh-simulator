@@ -1063,11 +1063,15 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         if model_eps > 0:
             exp_scale = meps / model_eps
 
-    # --- drop de baus: bau normal cai por KILL de monstro; bau do boss (azul)
-    # por kill do boss (1/run). Taxa do gamedata (per-mille) x bonus do save.
-    DROP_DIV = 1000.0   # taxas parecem per-mille; o RANKING independe da unidade
-    drop_n = 1 + runes.get("DropChanceNormalChestPercent", 0) / PCT
-    drop_b = 1 + runes.get("DropChanceStageBossChestPercent", 0) / PCT
+    # --- drop de baus: taxa per-mille POR KILL (confirmado na wiki:
+    # /items/normal-monster-box-1 = 16%/kill; /items/stage-boss-box-lv40 =
+    # 15%/boss). "~/clear" = taxa x kills (bau normal usa nNormal; bau do boss,
+    # 1 boss). O bonus de drop do save multiplica como os outros (1 + bonus/1000).
+    DROP_DIV = 1000.0
+    drop_n_mult = 1 + runes.get("DropChanceNormalChestPercent", 0) / PCT
+    drop_b_mult = 1 + runes.get("DropChanceStageBossChestPercent", 0) / PCT
+    drop_n = round((drop_n_mult - 1) * 100)   # % so pra exibir
+    drop_b = round((drop_b_mult - 1) * 100)
 
     def box_label(k):
         if not k:
@@ -1096,8 +1100,8 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         fit = fit_factor(party_level, econ["lvl"])
         st = gd.stages.get(key) or {}
         mbk, bbk = st.get("MonsterDropItemKey"), st.get("BossDropItemKey")
-        nbox = econ["nNormal"] * (st.get("MonsterDropItemRate") or 0) / DROP_DIV * drop_n
-        bbox = econ["nStageBoss"] * (st.get("BossDropItemRate") or 0) / DROP_DIV * drop_b
+        nbox = econ["nNormal"] * (st.get("MonsterDropItemRate") or 0) / DROP_DIV * drop_n_mult
+        bbox = econ["nStageBoss"] * (st.get("BossDropItemRate") or 0) / DROP_DIV * drop_b_mult
         rows.append({
             "key": key, "label": econ["label"], "tag": econ["tag"],
             "diff": econ["diff"], "type": econ["type"], "name": econ["name"],
@@ -1115,6 +1119,8 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "bossBox": box_label(bbk),
             "normalBoxLvl": (mbk % 1000) // 10 if mbk else 0,
             "bossBoxLvl": (bbk % 1000) // 10 if bbk else 0,
+            "normalBoxPerClear": round(nbox, 3),
+            "bossBoxPerClear": round(bbox, 3),
             "normalBoxPerHour": nbox / ct * 3600,
             "bossBoxPerHour": bbox / ct * 3600,
             "secsPerBossBox": (ct / bbox) if bbox > 0 else None,
@@ -1146,15 +1152,15 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     if push and push.get("rating") != "seguro":
         push = None
 
-    # rota de baus: melhor fase LIMPA para cada tipo. Prioriza o bau de NIVEL
-    # MAIS ALTO que voce consegue farmar (gear melhor) e, dentro do mesmo nivel,
-    # o que rende mais por hora (clear mais rapido). Senao recomendaria 1-1, que
-    # clera num piscar mas so dropa bau Lv1 inutil.
+    # rota de baus: melhor fase LIMPA. Prioriza o bau de NIVEL mais alto (gear
+    # melhor) e, dentro do mesmo nivel, mais baus/hora (clear mais rapido).
     box_pool = [r for r in rows if r["cleared"] and r["type"] != "ACTBOSS"]
     best_boss_box = max((r for r in box_pool if r["bossBoxPerHour"] > 0),
-                        key=lambda r: (r["bossBoxLvl"], r["bossBoxPerHour"]), default=None)
+                        key=lambda r: (r["bossBoxLvl"], r["bossBoxPerHour"]),
+                        default=None)
     best_normal_box = max((r for r in box_pool if r["normalBoxPerHour"] > 0),
-                          key=lambda r: (r["normalBoxLvl"], r["normalBoxPerHour"]), default=None)
+                          key=lambda r: (r["normalBoxLvl"], r["normalBoxPerHour"]),
+                          default=None)
 
     # --- exp/s por heroi: medido se houver, senao estimado pela fase atual
     eps_party = (meps if meps and meps > 0 else
@@ -1200,8 +1206,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "farm": {"rows": rows, "current": cur_row, "bestGold": best_gold,
                  "bestExp": best_exp, "push": push,
                  "bestBossBox": best_boss_box, "bestNormalBox": best_normal_box,
-                 "dropBonus": {"normal": round((drop_n - 1) * 100),
-                               "boss": round((drop_b - 1) * 100)}},
+                 "dropBonus": {"normal": drop_n, "boss": drop_b}},
         "levelEta": eta,
         "projection": projection,
         "offline": offline,
