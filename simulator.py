@@ -248,6 +248,15 @@ class StatBag:
     def put(self, stat, mod, value):
         if not stat or stat == "NONE" or not value:
             return
+        # o datamine do jogo tem sujeira: alguns BaseStat_Value vem como string
+        # com espaco no fim ("190 "); coage pra numero e ignora o invalido
+        if isinstance(value, str):
+            try:
+                value = float(value.strip())
+            except ValueError:
+                return
+            if not value:
+                return
         if mod == "FLAT":
             self.flat[stat] = self.flat.get(stat, 0.0) + value
         elif mod == "ADDITIVE":

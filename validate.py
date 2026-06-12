@@ -40,6 +40,12 @@ def t_stacking():
     out = bag.final()
     check("stacking flat*(1+add/1000)*mult", abs(out["X"] - 100 * 1.2 * 1.1) < 1e-6,
           f"got {out['X']}")
+    # o datamine tem valores string com espaco ("190 "): coage; lixo e ignorado
+    bag2 = StatBag()
+    bag2.put("Y", "FLAT", "190 ")
+    bag2.put("Y", "FLAT", "abc")
+    check("stacking: string numerica do datamine vira numero",
+          abs(bag2.final()["Y"] - 190) < 1e-9, f"got {bag2.final()}")
 
 
 def t_crit():
