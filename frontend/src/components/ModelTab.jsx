@@ -1,5 +1,5 @@
 import React from "react";
-import { fmt, fmtDur } from "../format.js";
+import { fmt } from "../format.js";
 
 export default function ModelTab({ sim, manualSamples }) {
   const cal = sim.calibration;
@@ -58,7 +58,7 @@ export default function ModelTab({ sim, manualSamples }) {
               fase atual: <b>{curRow.tag} {curRow.label}</b>{" "}
               <span className="muted">{curRow.name}</span>
               {curRow.clearTime != null && (
-                <span className="muted"> · previsto agora {fmtDur(curRow.clearTime)}</span>
+                <span className="muted"> · previsto agora {Math.round(curRow.clearTime)}s</span>
               )}
             </div>
             <div className="cal-row">
@@ -102,7 +102,7 @@ export default function ModelTab({ sim, manualSamples }) {
                     <td>{c.label} <span className="muted">{c.name}</span></td>
                     <td>{Math.round(c.observed)}s</td>
                     <td className="muted">{c.dpsThen ? fmt(c.dpsThen) : "—"}</td>
-                    <td>{c.predicted != null ? fmtDur(c.predicted) : "—"}</td>
+                    <td>{c.predicted != null ? Math.round(c.predicted) + "s" : "—"}</td>
                     <td className={Math.abs(c.errPct ?? 0) > 25 ? "err-bad" : "err-ok"}>
                       {c.errPct != null ? (c.errPct > 0 ? "+" : "") + c.errPct.toFixed(0) + "%" : "—"}
                     </td>
