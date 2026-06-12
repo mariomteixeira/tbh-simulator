@@ -929,10 +929,12 @@ def rune_advisor(gd: GameData, save: dict, runes: dict, *, fielded_saves,
                 return "farm", pct, (f"+{pct:.2f}% {lab} (fase atual)"
                                      if pct is not None else lab)
         if st in ("DropChanceNormalChestPercent", "DropChanceStageBossChestPercent"):
+            # so a CHANCE sobe; a obtencao real e limitada pelo jogo (cap +
+            # auto-abrir), entao o efeito em baus/h tende a ser menor
             cur_mult = drop_n_mult if st.startswith("DropChanceNormal") else drop_b_mult
             tipo = "normal" if st.startswith("DropChanceNormal") else "do boss"
             pct = (cur_mult + v / PCT) / cur_mult * 100 - 100
-            return "farm", pct, f"+{pct:.2f}% baús {tipo}/h"
+            return "farm", pct, f"+{pct:.2f}% chance de bau {tipo}"
         if st in ("OfflineRewardGoldPercent", "OfflineRewardExpPercent"):
             cur = runes.get(st, 0)
             pct = (PCT + cur + v) / (PCT + cur) * 100 - 100
@@ -1269,10 +1271,11 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         if model_eps > 0:
             exp_scale = meps / model_eps
 
-    # --- drop de baus: taxa per-mille POR KILL (confirmado na wiki:
-    # /items/normal-monster-box-1 = 16%/kill; /items/stage-boss-box-lv40 =
-    # 15%/boss). "~/clear" = taxa x kills (bau normal usa nNormal; bau do boss,
-    # 1 boss). O bonus de drop do save multiplica como os outros (1 + bonus/1000).
+    # --- baus: a CHANCE por kill vem da wiki (per-mille; ex. 16%/kill normal,
+    # 15%/boss), mas a OBTENCAO real e limitada pelo jogo (cap no chao +
+    # auto-abrir): observado ~3 baus normais/h vs ~140 que a chance daria.
+    # Entao: chance e so referencia; baus/h reais sao MEDIDOS dos contadores
+    # do save (Type 16, em compute_rates). Nao converta chance em baus/h.
     DROP_DIV = 1000.0
     drop_n_mult = 1 + runes.get("DropChanceNormalChestPercent", 0) / PCT
     drop_b_mult = 1 + runes.get("DropChanceStageBossChestPercent", 0) / PCT
@@ -1325,11 +1328,10 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "bossBox": box_label(bbk),
             "normalBoxLvl": (mbk % 1000) // 10 if mbk else 0,
             "bossBoxLvl": (bbk % 1000) // 10 if bbk else 0,
+            # chance esperada por clear (referencia da wiki; NAO e baus/h —
+            # a obtencao real e limitada pelo jogo e se mede do save)
             "normalBoxPerClear": round(nbox, 3),
             "bossBoxPerClear": round(bbox, 3),
-            "normalBoxPerHour": nbox / ct * 3600,
-            "bossBoxPerHour": bbox / ct * 3600,
-            "secsPerBossBox": (ct / bbox) if bbox > 0 else None,
             "cleared": idx <= max_idx,
             "current": key == cur_key,
         })
@@ -1358,14 +1360,15 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     if push and push.get("rating") != "seguro":
         push = None
 
-    # rota de baus: melhor fase LIMPA. Prioriza o bau de NIVEL mais alto (gear
-    # melhor) e, dentro do mesmo nivel, mais baus/hora (clear mais rapido).
+    # rota de baus: como a obtencao e limitada pelo jogo (taxa ~igual em
+    # qualquer fase que voce mate rapido), o que importa e o NIVEL do bau:
+    # melhor fase limpa = bau de nivel mais alto; clear mais rapido desempata.
     box_pool = [r for r in rows if r["cleared"] and r["type"] != "ACTBOSS"]
-    best_boss_box = max((r for r in box_pool if r["bossBoxPerHour"] > 0),
-                        key=lambda r: (r["bossBoxLvl"], r["bossBoxPerHour"]),
+    best_boss_box = max((r for r in box_pool if r["bossBoxLvl"] > 0),
+                        key=lambda r: (r["bossBoxLvl"], -r["clearTime"]),
                         default=None)
-    best_normal_box = max((r for r in box_pool if r["normalBoxPerHour"] > 0),
-                          key=lambda r: (r["normalBoxLvl"], r["normalBoxPerHour"]),
+    best_normal_box = max((r for r in box_pool if r["normalBoxLvl"] > 0),
+                          key=lambda r: (r["normalBoxLvl"], -r["clearTime"]),
                           default=None)
 
     # --- exp/s por heroi: medido se houver, senao estimado pela fase atual

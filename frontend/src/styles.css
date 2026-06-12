@@ -654,6 +654,17 @@ button.link:hover { color: var(--color-blood); }
 }
 .rec-step { font-size: .68rem; color: #d65bff; font-family: var(--font-mono); }
 
+/* baus medidos */
+.box-measured { display: flex; border-block: 1px solid var(--color-edge); margin-top: 10px; }
+.bm { flex: 1; padding: 10px 16px; display: flex; flex-direction: column; gap: 3px; }
+.bm + .bm { border-left: 1px solid var(--color-edge); }
+.bm i {
+  font-style: normal; font-family: var(--font-display); font-size: .6rem;
+  font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--color-dim);
+}
+.bm b { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 700; color: var(--color-cyan); }
+
 /* rota de desbloqueio nos detalhes */
 .rd-path { margin: 8px 0 4px; display: flex; flex-direction: column; }
 .rd-path-title {

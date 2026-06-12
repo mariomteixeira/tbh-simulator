@@ -160,6 +160,12 @@ def parse_state(inner: dict) -> dict:
         "heroes": heroes,
         "totalClears": agg.get((15, 0)),
         "totalKills": agg.get((0, 0)),
+        # baus OBTIDOS (Type 16): 1=normal, 2=boss de fase, 3=boss de ato.
+        # A taxa real de baus se MEDE daqui (o drop e limitado pelo jogo;
+        # converter chance da wiki em baus/h superestima ~60x).
+        "chestsNormal": agg.get((16, 1)),
+        "chestsBoss": agg.get((16, 2)),
+        "chestsAct": agg.get((16, 3)),
     }
 
 
@@ -190,7 +196,16 @@ def compute_rates(prev: dict, cur: dict) -> dict:
         if de >= 0:  # se negativo, upou de nivel; pula
             exp_rate[h["name"]] = de / dt_hours
 
-    return {"dt_hours": dt_hours, "gold_per_hour": gold_rate, "exp_per_hour": exp_rate}
+    # baus/h MEDIDOS (delta dos contadores de baus obtidos)
+    chests = {}
+    for label, key in (("normal", "chestsNormal"), ("boss", "chestsBoss"),
+                       ("act", "chestsAct")):
+        a, b = prev.get(key), cur.get(key)
+        if a is not None and b is not None and b >= a:
+            chests[label] = (b - a) / dt_hours
+
+    return {"dt_hours": dt_hours, "gold_per_hour": gold_rate,
+            "exp_per_hour": exp_rate, "chests_per_hour": chests}
 
 
 # ---------------------------------------------------------------------------

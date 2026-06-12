@@ -1,17 +1,18 @@
 import React, { useMemo } from "react";
 import { fmt, fmtDur } from "../format.js";
 
-export default function BoxPanel({ farm }) {
+export default function BoxPanel({ farm, rates }) {
   const bonus = farm.dropBonus || { normal: 0, boss: 0 };
+  const chests = rates?.chests_per_hour || {};
 
-  // fases que voce LIMPA, ranqueadas por nivel do bau e depois bau azul/h
+  // fases que voce LIMPA, ranqueadas por nivel do bau (clear rapido desempata)
   const rows = useMemo(
     () =>
       (farm.rows || [])
-        .filter((r) => r.cleared && r.type !== "ACTBOSS" && r.bossBoxPerHour > 0)
+        .filter((r) => r.cleared && r.type !== "ACTBOSS" && r.bossBoxLvl > 0)
         .sort(
           (a, b) =>
-            b.bossBoxLvl - a.bossBoxLvl || b.bossBoxPerHour - a.bossBoxPerHour
+            b.bossBoxLvl - a.bossBoxLvl || a.clearTime - b.clearTime
         )
         .slice(0, 10),
     [farm]
@@ -21,20 +22,32 @@ export default function BoxPanel({ farm }) {
     <section className="sec">
       <h2>Baús — rota de drop</h2>
       <p className="muted small">
-        Taxa por kill (datada na wiki): bau normal <b>16%</b>/kill, bau do boss
-        (azul) <b>15%</b>/boss. Com seus bônus: <b>+{bonus.normal}%</b> normal ·{" "}
-        <b>+{bonus.boss}%</b> boss. “1 a cada” = tempo médio até cair
-        (probabilístico, não timer fixo).
+        A obtenção de baús é <b>limitada pelo jogo</b> (cap no chão + auto-abrir),
+        então baús/h é <b>medido do seu save</b> — não dá pra derivar da chance.
+        O que você controla é o <b>nível do bau</b>: farme a fase mais alta que
+        clera rápido. Seus bônus de chance: +{bonus.normal}% normal ·{" "}
+        +{bonus.boss}% boss.
       </p>
+
+      <div className="box-measured">
+        <div className="bm">
+          <i>baús normais/h (medido)</i>
+          <b>{chests.normal != null ? chests.normal.toFixed(1) : "—"}</b>
+        </div>
+        <div className="bm">
+          <i>baús de boss/h (medido)</i>
+          <b>{chests.boss != null ? chests.boss.toFixed(1) : "—"}</b>
+        </div>
+      </div>
 
       <table className="mini wide" style={{ marginTop: 10 }}>
         <thead>
           <tr>
             <th>fase</th>
-            <th>bau (azul)</th>
-            <th>azul/h</th>
-            <th>1 a cada</th>
-            <th>normal/h</th>
+            <th>clear</th>
+            <th>bau do boss (azul)</th>
+            <th>chance/run</th>
+            <th>bau normal</th>
           </tr>
         </thead>
         <tbody>
@@ -43,19 +56,23 @@ export default function BoxPanel({ farm }) {
               <td>
                 {r.tag} {r.label}
               </td>
+              <td>{fmtDur(r.clearTime)}</td>
               <td className="muted">{r.bossBox}</td>
-              <td>{r.bossBoxPerHour.toFixed(1)}</td>
-              <td>{r.secsPerBossBox ? fmtDur(r.secsPerBossBox) : "—"}</td>
-              <td>{fmt(r.normalBoxPerHour)}</td>
+              <td>
+                {r.bossBoxPerClear != null
+                  ? Math.round(Math.min(r.bossBoxPerClear, 1) * 100) + "%"
+                  : "—"}
+              </td>
+              <td className="muted">{r.normalBox}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
       <p className="muted small" style={{ marginTop: 8 }}>
-        Taxas da wiki (datadas). Melhor mapa = bau de <b>nível mais alto</b>
-        (gear melhor) e, entre os de mesmo nível, o de <b>clear mais rápido</b>
-        (mais baús/h).
+        “Chance/run” é a referência da wiki com seus bônus — o teto, não a taxa
+        real. Melhor rota: o bau de <b>nível mais alto</b> entre as fases que
+        você limpa (a taxa medida não muda de fase pra fase se você mata rápido).
       </p>
     </section>
   );

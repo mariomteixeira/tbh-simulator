@@ -184,19 +184,27 @@ function FarmPage({ sim }) {
   };
 }
 
-function BoxesPage({ sim }) {
+function BoxesPage({ d, sim }) {
   const f = sim?.farm;
+  const chests = (d.sessionRates || d.rates)?.chests_per_hour || {};
   return {
-    main: f ? <BoxPanel farm={f} /> : null,
+    main: f ? <BoxPanel farm={f} rates={d.sessionRates || d.rates} /> : null,
     rail: f && (
       <>
+        <RailRows
+          title="Medido na sessão"
+          rows={[
+            ["baús normais/h", chests.normal != null ? chests.normal.toFixed(1) : "—"],
+            ["baús de boss/h", chests.boss != null ? chests.boss.toFixed(1) : "—"],
+          ]}
+        />
         {f.bestBossBox && (
           <RailRows
             title="Bau do boss (azul)"
             rows={[
               ["melhor fase", <StageRef r={f.bestBossBox} />],
-              ["por hora", f.bestBossBox.bossBoxPerHour.toFixed(1)],
-              ["1 a cada", fmtDur(f.bestBossBox.secsPerBossBox)],
+              ["bau", f.bestBossBox.bossBox],
+              ["clear", fmtDur(f.bestBossBox.clearTime)],
             ]}
           />
         )}
@@ -205,13 +213,13 @@ function BoxesPage({ sim }) {
             title="Bau normal"
             rows={[
               ["melhor fase", <StageRef r={f.bestNormalBox} />],
-              ["por hora", fmt(f.bestNormalBox.normalBoxPerHour)],
+              ["bau", f.bestNormalBox.normalBox],
             ]}
           />
         )}
         {f.dropBonus && (
           <RailRows
-            title="Seus bônus"
+            title="Bônus de chance"
             rows={[
               ["bau normal", "+" + f.dropBonus.normal + "%"],
               ["bau do boss", "+" + f.dropBonus.boss + "%"],
@@ -278,7 +286,7 @@ export default function App() {
   if (st) {
     if (route.id === "overview") page = Overview({ d, sim, st, sr });
     else if (route.id === "farm") page = FarmPage({ sim });
-    else if (route.id === "boxes") page = BoxesPage({ sim });
+    else if (route.id === "boxes") page = BoxesPage({ d, sim });
     else if (route.id === "heroes") page = HeroesPage({ d, sim, st });
     else if (route.id === "offline") page = OfflinePage({ sim });
     else if (route.id === "model") page = ModelPage({ d, sim });

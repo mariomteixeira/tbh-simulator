@@ -157,8 +157,10 @@ def t_real_save(gd):
     check("simulate: push so se 'seguro' (ou None)",
           r["farm"]["push"] is None or r["farm"]["push"]["rating"] == "seguro")
     bb = r["farm"]["bestBossBox"]
-    check("simulate: rota de bau do boss e fase LIMPA com perHour>0",
-          bb and bb["cleared"] and bb["bossBoxPerHour"] > 0 and bb["bossBox"])
+    check("simulate: rota de bau = fase LIMPA com bau de nivel mais alto",
+          bb and bb["cleared"] and bb["bossBoxLvl"] > 0 and bb["bossBox"] and
+          bb["bossBoxLvl"] == max(x["bossBoxLvl"] for x in r["farm"]["rows"]
+                                  if x["cleared"] and x["type"] != "ACTBOSS"))
     rt = r["runes"]
     check("runas: arvore completa (197 nos)", len(rt["nodes"]) == 197,
           f"got {len(rt['nodes'])}")
