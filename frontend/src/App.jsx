@@ -87,8 +87,8 @@ export default function App() {
           sampleLog={d.sampleLog}
         />
       ) : (
-        <main className="dash">
-          <section className="cards-row">
+        <main className="bento">
+          <section className="kpi-strip">
             <StatCard label="Gold" value={fmt(st.gold)} sub={goldRate} accent="gold" />
             <StatCard
               label="DPS do time"
@@ -111,24 +111,49 @@ export default function App() {
             />
           </section>
 
-          {sim?.coach && <Coach paragraphs={sim.coach} />}
-          {sim && <FarmTable farm={sim.farm} />}
-          {sim?.farm && <BoxPanel farm={sim.farm} />}
-
-          <div className="charts-row">
-            <GoldChart history={d.history} />
-            {sim?.projection?.length > 0 && (
-              <ProjectionChart projection={sim.projection} />
-            )}
+          {sim?.coach && (
+            <div className="cell c-8">
+              <Coach paragraphs={sim.coach} />
+            </div>
+          )}
+          {sim && (
+            <div className="cell c-4">
+              <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />
+            </div>
+          )}
+          {sim && (
+            <div className="cell c-12">
+              <FarmTable farm={sim.farm} />
+            </div>
+          )}
+          {sim?.farm && (
+            <div className="cell c-7">
+              <BoxPanel farm={sim.farm} />
+            </div>
+          )}
+          {sim?.offline && (
+            <div className="cell c-5">
+              <OfflinePanel offline={sim.offline} />
+            </div>
+          )}
+          <div className="cell c-12">
+            <div className="charts-row">
+              <GoldChart history={d.history} />
+              {sim?.projection?.length > 0 && (
+                <ProjectionChart projection={sim.projection} />
+              )}
+            </div>
           </div>
-
-          <section className="panel-grid">
-            {sim && <Heroes sim={sim} state={st} rates={d.sessionRates || d.rates} />}
-            {sim?.gear && <GearPanel gear={sim.gear} />}
-            {sim?.offline && <OfflinePanel offline={sim.offline} />}
-          </section>
-
-          {sim?.heroes?.length > 0 && <DamagePanel heroes={sim.heroes} />}
+          {sim?.gear && (
+            <div className="cell c-6">
+              <GearPanel gear={sim.gear} />
+            </div>
+          )}
+          {sim?.heroes?.length > 0 && (
+            <div className="cell c-6">
+              <DamagePanel heroes={sim.heroes} />
+            </div>
+          )}
         </main>
       )}
 
