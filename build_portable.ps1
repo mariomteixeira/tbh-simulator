@@ -31,9 +31,14 @@ if (-not (Test-Path $pyZip)) {
 }
 Expand-Archive $pyZip -DestinationPath $pyDir -Force
 
-# habilita o site-packages no runtime embutido (descomenta 'import site')
+# ajusta o sys.path do runtime embutido (._pth congela o path):
+#   - habilita site-packages (descomenta 'import site')
+#   - adiciona '..' = a pasta do app (server.py, tbh_tracker, updater, etc.),
+#     que fica um nivel acima de python/ — senao os imports do app falham
 $pth = Get-ChildItem $pyDir -Filter "python*._pth" | Select-Object -First 1
-(Get-Content $pth.FullName) -replace '^#\s*import site', 'import site' | Set-Content $pth.FullName
+$lines = (Get-Content $pth.FullName) -replace '^#\s*import site', 'import site'
+if ($lines -notcontains "..") { $lines = @($lines[0], "..") + $lines[1..($lines.Count - 1)] }
+Set-Content $pth.FullName $lines
 
 # -- 2) pip + dependencias ----------------------------------------------------
 $getpip = Join-Path $env:TEMP "get-pip.py"
