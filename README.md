@@ -45,6 +45,25 @@ mini-janela com **Iniciar/Parar** e status ao vivo, que sobe o servidor e abre
 o painel sem precisar de terminal.
 
 Opções: `--save <caminho>`, `--port`, `--interval`, `--debounce`.
+
+## Instalar em outro PC (sem Python) + updates remotos
+
+Gere o pacote **portátil** (Python embutido + app + painel buildado):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build_portable.ps1 -Repo usuario/tbh-simulator
+```
+
+Sai um `dist-portable\TBH-Copilot.zip`. No PC alvo: **extrair e rodar
+`TBH Copilot.bat`** — nada pra instalar. O launcher ganha um botão
+**Atualizar** que baixa a última versão do branch direto do GitHub
+(preservando `data/` — calibrações, teto, histórico). Fluxo de update:
+você dá `git push`, a pessoa clica em Atualizar.
+
+Requisitos: o repositório precisa estar no GitHub (público; pra privado,
+adicione `"token": "ghp_..."` no `update_config.json` da instalação). O
+`frontend/dist` é versionado de propósito pra isso — rode `npm run build` e
+commite junto quando mexer no painel.
 Validações: `python validate.py`.
 Dev do frontend com hot-reload: `cd frontend && npm run dev` (proxy para a API).
 

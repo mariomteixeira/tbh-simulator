@@ -17,6 +17,7 @@ A entrada de dados (calibracao de tempo etc.) fica toda no painel web.
 import json
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import webbrowser
@@ -24,6 +25,11 @@ from pathlib import Path
 
 import tkinter as tk
 from tkinter import ttk
+
+try:
+    import updater  # auto-update via GitHub (ativo so com update_config.json)
+except Exception:
+    updater = None
 
 ROOT = Path(__file__).resolve().parent
 SERVER = ROOT / "server.py"
@@ -148,6 +154,16 @@ class Painel:
                                  command=lambda: webbrowser.open(URL), state="disabled")
         self.b_open.pack(fill="x", padx=12, pady=(0, 6))
 
+        # auto-update (so em instalacao portatil, com update_config.json)
+        self._update_msg = None
+        if updater is not None and updater._cfg():
+            self.b_update = ttk.Button(root, text="Atualizar",
+                                       command=self.update_app)
+            self.b_update.pack(fill="x", padx=12, pady=(0, 6))
+            threading.Thread(target=self._check_update, daemon=True).start()
+        else:
+            self.b_update = None
+
         ttk.Separator(root).pack(fill="x", padx=12, pady=2)
 
         self.info = ttk.Frame(root)
@@ -197,6 +213,38 @@ class Painel:
         # fechar a janela derruba o servidor junto (sem processo orfao)
         self.stop()
         self.root.destroy()
+
+    # -- auto-update ---------------------------------------------------------
+    def _check_update(self):
+        info = updater.check()
+        if info and info["update"]:
+            self.root.after(0, lambda: self.b_update.config(
+                text="Atualizar — nova versão disponível!"))
+
+    def update_app(self):
+        if self.b_update is None:
+            return
+        self.b_update.config(state="disabled", text="Atualizando…")
+        was_running = self.running()
+        self.stop()
+
+        def work():
+            ok, msg = updater.apply_update()
+            self._update_msg = (ok, msg, was_running)
+
+        threading.Thread(target=work, daemon=True).start()
+        self._wait_update()
+
+    def _wait_update(self):
+        if self._update_msg is None:
+            self.root.after(300, self._wait_update)
+            return
+        ok, msg, was_running = self._update_msg
+        self._update_msg = None
+        self.b_update.config(state="normal", text="Atualizar")
+        self._set_info([("update", msg, "ok" if ok else "erro")])
+        if ok and was_running:
+            self.start()  # sobe o servidor ja com o codigo novo
 
     # -- polling da API -----------------------------------------------------
     def poll(self):

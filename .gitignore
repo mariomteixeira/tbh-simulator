@@ -6,9 +6,16 @@
 # Clone de terceiros, mantido so pra comparacao local (nao vendorizar — ver README).
 /reference/
 
-# Dependencias e build do frontend (regeneraveis: npm install / npm run build).
+# Dependencias do frontend (regeneraveis: npm install).
+# O build (frontend/dist) E VERSIONADO de proposito: o pacote portatil e o
+# auto-update baixam o painel pronto do GitHub, sem precisar de Node no PC alvo.
 /frontend/node_modules/
-/frontend/dist/
+
+# Pacote portatil e config de update (gerados pelo build_portable.ps1;
+# a config aponta pro repo e so existe na instalacao alvo)
+/dist-portable/
+/update_config.json
+/.version
 
 # Python
 __pycache__/
