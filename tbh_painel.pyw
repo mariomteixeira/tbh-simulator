@@ -15,6 +15,7 @@ A entrada de dados (calibracao de tempo etc.) fica toda no painel web.
 """
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -22,6 +23,14 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
+
+# No pacote portatil (Python embutido) o Tcl/Tk fica em python/tcl/ e o tkinter
+# nao o acha sozinho — aponta antes de importar. Em instalacao normal nao faz mal.
+_pyroot = os.path.dirname(os.path.abspath(sys.executable))
+for _env, _sub in (("TCL_LIBRARY", "tcl8.6"), ("TK_LIBRARY", "tk8.6")):
+    _p = os.path.join(_pyroot, "tcl", _sub)
+    if os.path.isdir(_p):
+        os.environ.setdefault(_env, _p)
 
 import tkinter as tk
 from tkinter import ttk

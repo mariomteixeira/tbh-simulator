@@ -50,6 +50,22 @@ if (-not (Test-Path $getpip)) {
     --no-warn-script-location --quiet
 Write-Host "dependencias instaladas"
 
+# -- 2b) tkinter (a janelinha do launcher) ------------------------------------
+# O Python embeddable NAO inclui tkinter nem o Tcl/Tk. Copia do Python completo
+# do sistema (precisa ser a mesma versao major.minor, 3.12).
+$sysPy = Split-Path (Get-Command python -ErrorAction Stop).Source
+foreach ($f in @("_tkinter.pyd", "tcl86t.dll", "tk86t.dll", "zlib1.dll")) {
+  $src = Join-Path $sysPy "DLLs\$f"
+  if (Test-Path $src) { Copy-Item $src $pyDir -Force }
+}
+$spkg = Join-Path $pyDir "Lib\site-packages"
+New-Item -ItemType Directory -Force $spkg | Out-Null
+Copy-Item (Join-Path $sysPy "Lib\tkinter") (Join-Path $spkg "tkinter") -Recurse -Force
+New-Item -ItemType Directory -Force (Join-Path $pyDir "tcl") | Out-Null
+Copy-Item (Join-Path $sysPy "tcl\tcl8.6") (Join-Path $pyDir "tcl\tcl8.6") -Recurse -Force
+Copy-Item (Join-Path $sysPy "tcl\tk8.6") (Join-Path $pyDir "tcl\tk8.6") -Recurse -Force
+Write-Host "tkinter empacotado"
+
 # -- 3) arquivos do app -------------------------------------------------------
 $files = @("server.py", "simulator.py", "store.py", "tbh_tracker.py",
            "tbh_painel.pyw", "updater.py", "fetch_gamedata.py",
