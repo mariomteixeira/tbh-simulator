@@ -32,6 +32,8 @@ TABLES = [
     # progressao
     "runes", "rune_levels", "stages", "stage_levels",
     "levels", "offline_rewards",
+    # cubo / alquimia (curva de nivel do cubo)
+    "cube_levels",
     # colecao
     "pets", "pet_stats",
 ]

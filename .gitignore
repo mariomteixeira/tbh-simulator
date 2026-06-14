@@ -6,6 +6,10 @@
 # Clone de terceiros, mantido so pra comparacao local (nao vendorizar — ver README).
 /reference/
 
+# Cache de icones de itens (baixados sob demanda do wiki pelo /itemicon;
+# variam por save e sao re-baixaveis — nao versionar).
+/gamedata/icons/items/
+
 # Dependencias do frontend (regeneraveis: npm install).
 # O build (frontend/dist) E VERSIONADO de proposito: o pacote portatil e o
 # auto-update baixam o painel pronto do GitHub, sem precisar de Node no PC alvo.

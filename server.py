@@ -25,7 +25,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -293,6 +293,36 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
     rune_icons = GAMEDATA_DIR / "icons" / "runes"
     if rune_icons.exists():
         app.mount("/runeicons", StaticFiles(directory=rune_icons), name="runeicons")
+
+    # icones de itens: baixados sob demanda do wiki e cacheados localmente.
+    # (o wiki bloqueia user-agent nao-navegador; mandamos um de Chrome)
+    item_icon_dir = GAMEDATA_DIR / "icons" / "items"
+    icon_ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                             "AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
+
+    @app.get("/itemicon/{key}.png")
+    def item_icon(key: int):
+        dest = item_icon_dir / f"{key}.png"
+        if not dest.exists():
+            item = watcher.gamedata.items.get(key) if watcher.gamedata else None
+            ipath = item.get("icon") if item else None
+            if not ipath:
+                return Response(status_code=404)
+            try:
+                import urllib.request
+                req = urllib.request.Request("https://taskbarhero.wiki" + ipath,
+                                             headers=icon_ua)
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = r.read()
+                if not data.startswith(b"\x89PNG"):
+                    return Response(status_code=404)
+                item_icon_dir.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+            except Exception:
+                return Response(status_code=404)
+        return FileResponse(dest, media_type="image/png",
+                            headers={"Cache-Control": "max-age=604800"})
+
     return app
 
 

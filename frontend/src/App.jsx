@@ -12,11 +12,13 @@ import GoldChart from "./components/GoldChart.jsx";
 import ProjectionChart from "./components/ProjectionChart.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 import RunesPage from "./components/RunesPage.jsx";
+import CubePanel from "./components/CubePanel.jsx";
 
 const ROUTES = [
   { id: "overview", hash: "#/", label: "Visão geral", group: "Painel" },
   { id: "farm", hash: "#/farm", label: "Farm", group: "Painel" },
   { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel" },
+  { id: "cube", hash: "#/cubo", label: "Cubo", group: "Painel" },
   { id: "runes", hash: "#/runas", label: "Runas", group: "Painel" },
   { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel" },
   { id: "offline", hash: "#/offline", label: "Offline", group: "Painel" },
@@ -388,6 +390,8 @@ export default function App() {
           <div className="loading">aguardando primeira leitura do save…</div>
         ) : route.id === "runes" ? (
           <RunesPage key="runes" runes={sim?.runes} />
+        ) : route.id === "cube" ? (
+          <CubePanel key="cube" alchemy={sim?.alchemy} />
         ) : (
           <main
             key={route.id}

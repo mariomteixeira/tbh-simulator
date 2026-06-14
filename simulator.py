@@ -32,6 +32,7 @@ O que e estimativa nossa (nao vem do datamine) esta marcado com [estimativa]
 e e absorvido pela calibracao com as taxas medidas entre saves.
 """
 
+import bisect
 import json
 import math
 import time
@@ -94,6 +95,24 @@ class GameData:
         self.gear_types = {g["GearType"]: g for g in _load(gd_dir, "gear_types")}
         self.stat_mods = {(m["StatModKey"], m["Tier"]): m
                           for m in _load(gd_dir, "stat_mods")}
+
+        # --- alquimia/cubo: escalas do CubeExp por item (grade/tipo/gear/lvl) ---
+        self.grades = {g["GRADE"]: g for g in _load(gd_dir, "grades")}
+        self.item_type_scales = {r["ItemType"]: r
+                                 for r in _load(gd_dir, "item_type_scales")}
+        self.gear_type_scales = {r["GearType"]: r
+                                 for r in _load(gd_dir, "gear_type_scales")}
+        _ils = sorted(_load(gd_dir, "item_level_scales"),
+                      key=lambda r: r["Level"])
+        self.ils_levels = [r["Level"] for r in _ils]
+        self.ils_cube = [r["CubeExpScale"] for r in _ils]
+        # curva de nivel do cubo (Level -> ExpForLevelUp); pode faltar em
+        # instalacoes antigas que ainda nao rodaram o fetch novo
+        try:
+            self.cube_levels = {r["Level"]: r["ExpForLevelUp"]
+                                for r in _load(gd_dir, "cube_levels")}
+        except FileNotFoundError:
+            self.cube_levels = {}
 
         self.runes = {r["RuneKey"]: r for r in _load(gd_dir, "runes")}
         self.rune_levels = {}
@@ -290,6 +309,149 @@ def rune_stats(gd: GameData, save: dict):
                 st = row["STATTYPE"]
                 total[st] = total.get(st, 0.0) + (row["Value"] or 0)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Alquimia: EXP que cada item dá ao Cubo
+# ---------------------------------------------------------------------------
+_CUBE_MAX_NEED = 999_999_999  # sentinela de "nivel maximo" na curva do cubo
+
+
+def _item_level_scale(gd: GameData, level):
+    """CubeExpScale para um nivel de item. A tabela vem em passos de 5 niveis;
+    interpola linear no meio e extrapola linear acima do ultimo ponto."""
+    if level is None:
+        return 1000.0
+    xs, ys = gd.ils_levels, gd.ils_cube
+    if not xs:
+        return 1000.0
+    if level <= xs[0]:
+        return ys[0]
+    if level >= xs[-1]:
+        slope = (ys[-1] - ys[-2]) / (xs[-1] - xs[-2]) if len(xs) > 1 else 0.0
+        return ys[-1] + slope * (level - xs[-1])
+    k = bisect.bisect_right(xs, level) - 1
+    if xs[k] == level:
+        return ys[k]
+    t = (level - xs[k]) / (xs[k + 1] - xs[k])
+    return ys[k] + t * (ys[k + 1] - ys[k])
+
+
+def cube_exp(gd: GameData, item: dict) -> int:
+    """EXP base que um item dá ao Cubo na Alquimia.
+
+    Validado EXATO contra os 5744 valores dataminados (itemCubeExp):
+      base(grade) × ItemTypeScale/1000 × GearTypeScale/1000 (só GEAR)
+                  × ItemLevelScale/1000
+    NÃO depende do nível do cubo. O buff de runa (CubeExpPercent) entra depois.
+    """
+    grade = gd.grades.get(item.get("grade"))
+    if not grade:
+        return 0
+    val = float(grade.get("BaseCubeExp", 0) or 0)
+    ts = gd.item_type_scales.get(item.get("type"))
+    if not ts:
+        return 0
+    val *= (ts.get("CubeExpScale", 1000) or 1000) / 1000.0
+    if item.get("type") == "GEAR":
+        gs = gd.gear_type_scales.get(item.get("gear"))
+        if not gs:
+            return 0
+        val *= (gs.get("CubeExpScale", 1000) or 1000) / 1000.0
+    val *= _item_level_scale(gd, item.get("level")) / 1000.0
+    return round(val)
+
+
+def _project_cube(gd: GameData, level: int, exp: float, add: float) -> dict:
+    """Aplica `add` de EXP no cubo a partir de (level, exp) e diz onde para."""
+    total = exp + max(0.0, add)
+    lvl, gained = level, 0
+    while True:
+        need = gd.cube_levels.get(lvl)
+        if not need or need >= _CUBE_MAX_NEED or total < need:
+            break
+        total -= need
+        lvl += 1
+        gained += 1
+    return {"level": lvl, "exp": round(total, 1), "gained": gained}
+
+
+def alchemy_panel(gd: GameData, save: dict, runes: dict):
+    """Itens do inventário/stash com o EXP de Cubo de cada um (base e com buff
+    de runa), agrupados como no jogo, + estado e projeção do cubo.
+
+    Itens equipados, bloqueados ou sem valor de cubo são marcados como não
+    alquimizáveis (igual ao jogo) e ficam fora dos totais."""
+    if not gd.grades or not gd.cube_levels:
+        return None
+    cube = save.get("cubeSaveLevelData") or {}
+    level = int(cube.get("Level", 1) or 1)
+    exp = float(cube.get("Exp", 0) or 0)
+    need = gd.cube_levels.get(level)
+    raw = runes.get("CubeExpPercent", 0) or 0      # per-mille no datamine: 40 = 4%
+    mult = 1 + raw / PCT
+
+    equipped = set()
+    for h in save.get("heroSaveDatas") or []:
+        for u in h.get("equippedItemIds") or []:
+            if u:
+                equipped.add(u)
+    by_uid = {it.get("UniqueId"): it for it in save.get("itemSaveDatas") or []}
+
+    def entry(uid):
+        if not uid:
+            return None
+        it = by_uid.get(uid)
+        if not it:
+            return None
+        item = gd.items.get(it.get("ItemKey"))
+        if not item:
+            return None
+        base = cube_exp(gd, item)
+        blocked = bool(it.get("IsBlocked"))
+        eq = uid in equipped
+        return {
+            "uid": str(uid),
+            "key": item["id"],
+            "name": _name(item.get("name")),
+            "grade": item.get("grade"),
+            "type": item.get("type"),
+            "gear": item.get("gear"),
+            "level": item.get("level"),
+            "base": base,
+            "eff": round(base * mult),
+            "blocked": blocked,
+            "equipped": eq,
+            "ok": base > 0 and not blocked and not eq,
+        }
+
+    containers = []
+    for cid, label, key in (("inventory", "Inventário", "inventorySaveDatas"),
+                            ("stash", "Stash", "stashSaveDatas"),
+                            ("trading", "Stash de troca", "tradingStashSaveDatas")):
+        slots = [entry(s.get("ItemUniqueId")) for s in (save.get(key) or [])]
+        alch = [e for e in slots if e and e["ok"]]
+        s_eff = sum(e["eff"] for e in alch)
+        containers.append({
+            "id": cid, "label": label, "slots": slots,
+            "filled": sum(1 for e in slots if e),
+            "alchCount": len(alch), "sumEff": s_eff,
+            "project": _project_cube(gd, level, exp, s_eff),
+        })
+
+    sum_all = sum(c["sumEff"] for c in containers)
+    return {
+        "cube": {
+            "level": level, "exp": round(exp, 1), "need": need,
+            "maxed": not need or need >= _CUBE_MAX_NEED,
+            "pctToNext": (round(exp / need * 100, 1)
+                          if need and need < _CUBE_MAX_NEED else None),
+        },
+        "buff": {"pct": round(raw / 10, 1), "mult": round(mult, 4)},
+        "containers": containers,
+        "projectAll": _project_cube(gd, level, exp, sum_all),
+        "sumAll": sum_all,
+    }
 
 
 def collect_hero(gd: GameData, save: dict, hero_save: dict, runes: dict,
@@ -1349,6 +1511,10 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "econScale": {"global": round(global_scale, 3),
                       "stages": {str(k): round(v, 3) for k, v in scales.items()}},
     }
+    try:
+        result["alchemy"] = alchemy_panel(gd, save, runes)
+    except Exception:
+        result["alchemy"] = None
     result["coach"] = coach_text(result, state_heroes=None)
     return result
 
