@@ -1,18 +1,20 @@
 import React, { useMemo, useState } from "react";
 import { fmt } from "../format.js";
 
-/* cores/labels por grau — escala de raridade (é o que mais dita o EXP de cubo) */
+/* cores/labels por grau — paleta REAL do jogo (variáveis --color-* da wiki).
+   common e topos (beyond/celestial/cosmic) não têm cor flat no jogo (estilo
+   especial); pra esses uso tons distintos próprios. */
 const GRADES = {
-  COMMON: { label: "Comum", c: "#9aa6b2" },
-  UNCOMMON: { label: "Incomum", c: "#56c777" },
-  RARE: { label: "Raro", c: "#4f9cf0" },
-  LEGENDARY: { label: "Lendário", c: "#b06bf0" },
-  IMMORTAL: { label: "Imortal", c: "#f0863b" },
-  ARCANA: { label: "Arcana", c: "#f5d24a" },
-  BEYOND: { label: "Além", c: "#38d9cf" },
+  COMMON: { label: "Comum", c: "#b8c0cc" },
+  UNCOMMON: { label: "Incomum", c: "#54fc0c" },
+  RARE: { label: "Raro", c: "#2f8bfc" },
+  LEGENDARY: { label: "Lendário", c: "#fc9c0c" }, // dourado/amarelo (jogo)
+  IMMORTAL: { label: "Imortal", c: "#fc2424" }, // vermelho (jogo)
+  ARCANA: { label: "Arcana", c: "#b40cfc" },
+  BEYOND: { label: "Além", c: "#19e6c3" },
   CELESTIAL: { label: "Celestial", c: "#7ad7ff" },
-  DIVINE: { label: "Divino", c: "#ff9ec7" },
-  COSMIC: { label: "Cósmico", c: "#ff6b6b" },
+  DIVINE: { label: "Divino", c: "#fce454" },
+  COSMIC: { label: "Cósmico", c: "#ff5ea8" },
 };
 const GEAR_PT = {
   SWORD: "Espada", AXE: "Machado", BOW: "Arco", CROSSBOW: "Besta",
@@ -24,7 +26,7 @@ const GEAR_PT = {
 const gradeOf = (g) => GRADES[g] || { label: g || "—", c: "#768192" };
 const typeLabel = (e) =>
   e.type === "GEAR" ? GEAR_PT[e.gear] || e.gear : e.type === "MATERIAL" ? "Material" : e.type;
-const PAGE = 56;
+const PAGE = 49; // stash do jogo é 7×7
 
 function ItemIcon({ e, size = 40 }) {
   const [bad, setBad] = useState(false);

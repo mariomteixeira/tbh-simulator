@@ -790,11 +790,12 @@ button.link:hover { color: var(--color-blood); }
 .cube-toggle.on { color: var(--color-arc); border-color: var(--color-arc); }
 .cube-sub { margin-top: -4px; }
 
-/* grade estilo stash */
+/* grade estilo stash: 7×7 fixo (igual ao jogo) */
 .cube-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
+  max-width: 520px;
 }
 .cube-cell {
   position: relative; aspect-ratio: 1; cursor: pointer;
