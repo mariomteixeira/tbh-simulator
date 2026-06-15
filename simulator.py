@@ -114,6 +114,14 @@ class GameData:
         except FileNotFoundError:
             self.cube_levels = {}
 
+        # buffs de skill (ativos por cooldown): grupo -> chaves -> stat
+        try:
+            self.buffs = {b["BuffKey"]: b for b in _load(gd_dir, "buffs")}
+            self.buff_groups = {g["BuffGroupKey"]: g
+                                for g in _load(gd_dir, "buff_groups")}
+        except FileNotFoundError:
+            self.buffs, self.buff_groups = {}, {}
+
         self.runes = {r["RuneKey"]: r for r in _load(gd_dir, "runes")}
         self.rune_levels = {}
         for r in _load(gd_dir, "rune_levels"):
@@ -553,8 +561,64 @@ def _skill_level(gd: GameData, save: dict, hero_key: int, skill_key: int):
     return lvl
 
 
+# rótulos pt-BR de stats afetados por buffs de skill
+_STAT_PT = {
+    "AttackSpeed": "Vel. Ataque", "AttackDamage": "Dano de Ataque",
+    "CriticalChance": "Chance Crítica", "CriticalDamage": "Dano Crítico",
+    "MovementSpeed": "Vel. Movimento", "MoveSpeed": "Vel. Movimento",
+    "Armor": "Armadura", "MaxHp": "HP Máx", "CooldownReduction": "Recarga",
+}
+
+
+def _auto_dps_from(stats: dict, base_skill: dict):
+    """(statusDps, auto) do ataque básico para um dado dict de stats.
+    Usado tanto pro stats real quanto pro stats COM buff aplicado."""
+    ad = stats.get("AttackDamage") or 0
+    crit = _crit_factor(stats)
+    aps = (stats.get("AttackSpeed") or 0) / 100.0
+    base_mult = (base_skill.get("Value") or PCT) / PCT
+    delivery = base_skill.get("DamageDeliveryType") or "Melee"
+    element = base_skill.get("DamageType") or "Physical"
+    status_dps = ad * aps * crit * base_mult * BASIC_ATTACK_MULT
+    return status_dps, status_dps * _dmg_bonus(stats, delivery, element)
+
+
+def _skill_buffs(gd: GameData, buff_group_key):
+    """Resolve BuffGroupKey -> lista de buffs {STATTYPE, MODTYPE, Value}."""
+    g = gd.buff_groups.get(buff_group_key)
+    if not g:
+        return []
+    keys = g.get("BuffKeys")
+    keys = keys if isinstance(keys, list) else [keys]
+    return [gd.buffs[k] for k in keys if k in gd.buffs]
+
+
+def _stats_with_buff(stats: dict, stat: str, frac: float):
+    """Cópia de stats com o buff aplicado. None se o stat não muda o DPS do
+    ataque básico (ex.: Vel. Movimento). frac = valor/PCT (900 -> 0.9 = +90%).
+    Modelo simples: trata o bônus como multiplicativo sobre o stat final
+    (AttackSpeed/AttackDamage) ou aditivo no pool per-mille (crítico)."""
+    s = dict(stats)
+    if stat == "AttackSpeed":
+        s["AttackSpeed"] = (stats.get("AttackSpeed") or 0) * (1 + frac)
+    elif stat == "AttackDamage":
+        s["AttackDamage"] = (stats.get("AttackDamage") or 0) * (1 + frac)
+    elif stat == "CriticalChance":
+        s["CriticalChance"] = (stats.get("CriticalChance") or 0) + frac * PCT
+    elif stat == "CriticalDamage":
+        s["CriticalDamage"] = (stats.get("CriticalDamage") or 0) + frac * PCT
+    else:
+        return None
+    return s
+
+
 def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
-    """DPS de ataque basico + skills de cooldown equipadas."""
+    """DPS de ataque basico + skills de cooldown equipadas.
+
+    Skills de BUFF (SkillBuffType="Buff", ex.: Surto Veloz = +90% Vel. Ataque)
+    NÃO contam como dano — elas escalam o DPS do ataque básico enquanto ativas.
+    A duração do buff não está no datamine/wiki; o uptime médio é ESTIMADO de
+    Param1/100 (convenção do status_effects) e marcado como estimativa."""
     hero = gd.heroes.get(hero_save["heroKey"]) or {}
     ad = stats.get("AttackDamage") or 0
     crit = _crit_factor(stats)
@@ -573,6 +637,8 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
 
     skill = 0.0
     skills_detail = []
+    buffs_detail = []
+    buff_dps = 0.0
     cast = max((stats.get("CastSpeed") or 100) / 100.0, 0.1)
     cdr = min((stats.get("CooldownReduction") or 0) / PCT, 0.75)
     for sk in hero_save.get("equippedSKillKey") or []:
@@ -585,6 +651,38 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
             continue
         lvl = _skill_level(gd, save, hero_save["heroKey"], sk)
         val = lvl_rows.get(lvl) or lvl_rows.get(max(lvl_rows)) or 0
+
+        # --- skill de BUFF (não é dano): escala o DPS do ataque básico ---
+        if row.get("SkillBuffType") == "Buff":
+            frac = val / PCT                     # 900 -> 0.9 (+90%)
+            p1 = row.get("Param1")
+            dur = (p1 / 100.0) if p1 else None   # duração ESTIMADA (não datada)
+            uptime = min(1.0, dur / cd) if (dur and cd > 0) else None
+            for b in _skill_buffs(gd, row.get("BuffGroupKey")):
+                st = b.get("STATTYPE")
+                buffed = _stats_with_buff(stats, st, frac)
+                active = avg = None
+                if buffed is not None:
+                    _, a2 = _auto_dps_from(buffed, base_skill)
+                    active = a2                  # DPS do básico com buff ativo
+                    if uptime is not None:
+                        avg = (a2 - auto) * uptime
+                        buff_dps += avg
+                buffs_detail.append({
+                    "key": sk,
+                    "name": _name(row.get("SkillNameKey_i18n")) or f"Skill {sk}",
+                    "level": lvl, "stat": _STAT_PT.get(st, st), "statType": st,
+                    "mod": b.get("MODTYPE"), "pct": round(val / 10.0, 1),
+                    "cooldown": cd,
+                    "durEst": round(dur, 1) if dur else None,
+                    "uptime": round(uptime * 100) if uptime is not None else None,
+                    "dpsActive": round(active, 1) if active else None,
+                    "dpsAvg": round(avg, 1) if avg is not None else None,
+                    "affectsDps": buffed is not None,
+                })
+            continue
+
+        # --- skill de DANO ---
         # delivery pode vir composto ("Projectile, AOE"): usa o primeiro
         sdel = (row.get("DamageDeliveryType") or "").split(",")[0].strip()
         if not sdel or sdel == "None":
@@ -605,13 +703,17 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
         })
 
     return {"statusDps": status_dps, "autoDps": auto, "skillDps": skill,
-            "dps": auto + skill, "delivery": delivery, "element": element,
+            "dps": auto + skill,
+            "buffDps": round(buff_dps, 1),
+            "dpsBuffed": round(auto + skill + buff_dps, 1),
+            "delivery": delivery, "element": element,
             "breakdown": {
                 "auto": {"statusDps": round(status_dps, 1),
                          "bonusMult": round(auto_bonus, 3),
                          "dps": round(auto, 1), "element": element,
                          "delivery": delivery},
                 "skills": skills_detail,
+                "buffs": buffs_detail,
             }}
 
 
@@ -624,17 +726,24 @@ def mitigation(armor: float, stage_level: int, damage: float):
     return min(red, 0.75)
 
 
+# "Elemental" = fogo/gelo/raio. CHAOS é separado e NÃO é coberto por
+# AllElementalResistance (só por ChaosResistance). Armadura só corta físico.
+_ELEMENTAL = ("Fire", "Cold", "Lightning")
+
+
 def hero_ehp(stats: dict, stage_level: int, hit: float, elements):
     """EHP contra um estagio: HP / fracao de dano que passa."""
     hp = stats.get("MaxHp") or 0
-    # fisico passa pela armadura; elemental por resistencia linear
+    # fisico passa pela armadura; elemental/chaos por resistencia linear
     phys_taken = 1 - mitigation(stats.get("Armor") or 0, stage_level, hit)
     takens = []
     for el in elements or ["Physical"]:
         if el == "Physical":
             takens.append(phys_taken)
         else:
-            res = (stats.get(f"{el}Resistance") or 0) + (stats.get("AllElementalResistance") or 0)
+            res = stats.get(f"{el}Resistance") or 0
+            if el in _ELEMENTAL:   # chaos NÃO recebe AllElementalResistance
+                res += stats.get("AllElementalResistance") or 0
             takens.append(max(1 - res / 100.0, 0.0) if res >= 0 else 1 + abs(res) / 100.0)
     avg_taken = sum(takens) / len(takens)
     dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
@@ -1275,6 +1384,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "cls": hero_row.get("ClassType"),
             "level": hs.get("HeroLevel"),
             "dps": dmg["dps"], "autoDps": dmg["autoDps"], "skillDps": dmg["skillDps"],
+            "buffDps": dmg["buffDps"], "dpsBuffed": dmg["dpsBuffed"],
             "statusDps": dmg["statusDps"],   # igual ao painel de Status do jogo
             "damage": dmg["breakdown"],      # dano real detalhado por skill
             "ehp": ehp,

@@ -402,6 +402,12 @@ table.farm tr.beyond td { opacity: .45; }
 .e-light { background: #2f2a10; color: #e8d35b; }
 .e-chaos { background: #2a1233; color: #c45be8; }
 .e-phys { background: #262a30; color: #aab4c0; }
+.dmg-buff { border-left: 2px solid var(--color-arc); padding-left: 8px; margin-left: -10px; }
+.buff-tag {
+  font-size: .6rem; font-weight: 700; padding: 1px 6px; border-radius: 99px;
+  margin-left: 4px; font-family: var(--font-display); text-transform: uppercase;
+  letter-spacing: .05em; background: rgba(157, 123, 240, .18); color: var(--color-arc);
+}
 
 /* ======================== offline ======================== */
 .park { padding: 4px 0 10px; }

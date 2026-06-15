@@ -26,6 +26,7 @@ TABLES = [
     # combate
     "heroes", "monsters", "skills", "skill_levels",
     "passive_skills", "attributes", "attribute_groups",
+    "buffs", "buff_groups", "status_effects",
     # itens
     "gear", "gear_types", "grades", "stat_mods",
     "item_level_scales", "item_type_scales", "gear_type_scales",

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import tbh_tracker as core
 from simulator import (GameData, StatBag, simulate, fit_clear_model,
-                       fit_factor, mitigation, offline_info,
+                       fit_factor, mitigation, offline_info, hero_damage,
                        project_levels, rune_stats, _crit_factor,
                        _rune_to_hero_stat, T_FIXED, T_WAVE)
 
@@ -273,9 +273,48 @@ def t_api():
         check("API viva", False, str(e))
 
 
+def t_buff_dps(gd):
+    """Skill de BUFF (Surto Veloz = +Vel.Ataque) NÃO pode virar dano direto;
+    deve escalar o DPS do ataque básico. Regressão do bug 'X de dano por uso'."""
+    hero_save = {"heroKey": 201, "equippedSKillKey": [20401]}  # Ranger + Surto Veloz
+    stats = {"AttackDamage": 1000.0, "AttackSpeed": 100.0,
+             "CriticalChance": 0.0, "CriticalDamage": 1000.0}
+    dmg = hero_damage(gd, {"attributeSaveDatas": []}, hero_save, stats)
+    sk_keys = [s["key"] for s in dmg["breakdown"]["skills"]]
+    check("buff: nao contado como skill de dano", 20401 not in sk_keys)
+    check("buff: skillDps zero (so buff equipado)", dmg["skillDps"] == 0)
+    buffs = dmg["breakdown"]["buffs"]
+    check("buff: listado em breakdown.buffs", len(buffs) == 1)
+    if buffs:
+        b = buffs[0]
+        check("buff: stat = AttackSpeed", b["statType"] == "AttackSpeed")
+        # lv1 = +50% AS -> ataque ativo = 1.5x do base
+        check("buff: DPS com buff ativo = base x (1+frac)",
+              abs(b["dpsActive"] - dmg["autoDps"] * 1.5) < 1.0,
+              f"active {b['dpsActive']} vs {dmg['autoDps']*1.5}")
+        check("buff: dpsBuffed inclui a media estimada",
+              dmg["dpsBuffed"] >= dmg["dps"])
+
+
+def t_chaos_resist():
+    """AllElementalResistance cobre fogo/gelo/raio, NÃO chaos. Chaos só por
+    ChaosResistance. Regressão do bug de resistência."""
+    from simulator import hero_ehp
+    base = {"MaxHp": 1000.0, "Armor": 0.0}
+    fire0 = hero_ehp(base, 1, 0, ["Fire"])
+    fire_all = hero_ehp({**base, "AllElementalResistance": 50}, 1, 0, ["Fire"])
+    check("AllElementalResistance reduz fogo (EHP sobe)", fire_all > fire0 + 1)
+    chaos0 = hero_ehp(base, 1, 0, ["Chaos"])
+    chaos_all = hero_ehp({**base, "AllElementalResistance": 50}, 1, 0, ["Chaos"])
+    check("AllElementalResistance NÃO cobre chaos", abs(chaos_all - chaos0) < 1e-6)
+    chaos_res = hero_ehp({**base, "ChaosResistance": 50}, 1, 0, ["Chaos"])
+    check("ChaosResistance reduz chaos (EHP sobe)", chaos_res > chaos0 + 1)
+
+
 if __name__ == "__main__":
     t_stacking()
     t_crit()
+    t_chaos_resist()
     t_mitigation()
     t_rune_mapping()
     t_fit_recovery()
@@ -283,6 +322,7 @@ if __name__ == "__main__":
     t_fit_single_manual()
     t_fit_factor()
     gd = GameData(ROOT / "gamedata")
+    t_buff_dps(gd)
     save = t_real_save(gd)
     t_econ_scale(gd, save)
     t_projection(gd)
