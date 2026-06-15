@@ -16,13 +16,23 @@ function Item({ it }) {
   );
 }
 
+export function RoleTag({ role }) {
+  if (!role) return null;
+  const tank = role === "tank";
+  return (
+    <span className={"role-tag " + (tank ? "r-tank" : "r-dps")}>
+      {tank ? "tank" : "dps"}
+    </span>
+  );
+}
+
 export default function GearPanel({ gear }) {
   const upgrades = [];
   const empties = [];
   for (const g of gear) {
     for (const s of g.slots) {
-      if (s.upgrade) upgrades.push({ cls: g.cls, ...s });
-      else if (s.empty) empties.push({ cls: g.cls, ...s });
+      if (s.upgrade) upgrades.push({ cls: g.cls, role: g.role, ...s });
+      else if (s.empty) empties.push({ cls: g.cls, role: g.role, ...s });
     }
   }
   if (!upgrades.length && !empties.length) {
@@ -41,7 +51,7 @@ export default function GearPanel({ gear }) {
         {upgrades.map((u, i) => (
           <div className="gear-row" key={i}>
             <div className="gear-slot">
-              {u.cls} · {u.gearType.toLowerCase()}
+              {u.cls} <RoleTag role={u.role} /> · {u.gearType.toLowerCase()}
             </div>
             <div className="gear-swap">
               <Item it={u.current} /> <span className="arrow">→</span>{" "}
@@ -79,9 +89,10 @@ export default function GearPanel({ gear }) {
           </div>
         )}
         <p className="muted small">
-          A troca é avaliada recalculando o herói inteiro (flats × percentuais ×
-          crítico × recarga) contra a fase atual — % de dano vale mais quando há
-          muito dano flat, e vice-versa.
+          A troca recalcula o herói inteiro (flats × percentuais × crítico ×
+          recarga, com todos os affixes) contra a fase atual. O ranking é por
+          papel: <b>tank</b> (Knight, Priest) pesa mais EHP; <b>dps</b> (Ranger,
+          Sorcerer, Hunter, Slayer) pesa mais dano.
         </p>
       </div>
     </section>

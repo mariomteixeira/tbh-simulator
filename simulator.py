@@ -416,6 +416,12 @@ def alchemy_panel(gd: GameData, save: dict, runes: dict):
         if not item:
             return None
         base = cube_exp(gd, item)
+        ilvl = item.get("level")
+        # LEVEL MATCHING: o EXP que o cubo recebe e escalado pela proximidade
+        # entre o nivel do item e o nivel do CUBO (mesma escala da EXP de
+        # monstro = fit_factor). Item ~no nivel do cubo (ou um pouco acima) =
+        # cheio; gap grande = quase nada. Sem nivel (material) = sem matching.
+        match = fit_factor(level, ilvl) if ilvl else 1.0
         blocked = bool(it.get("IsBlocked"))
         eq = uid in equipped
         return {
@@ -425,9 +431,10 @@ def alchemy_panel(gd: GameData, save: dict, runes: dict):
             "grade": item.get("grade"),
             "type": item.get("type"),
             "gear": item.get("gear"),
-            "level": item.get("level"),
+            "level": ilvl,
             "base": base,
-            "eff": round(base * mult),
+            "match": round(match, 3),
+            "eff": round(base * match * mult),
             "blocked": blocked,
             "equipped": eq,
             "ok": base > 0 and not blocked and not eq,
@@ -448,9 +455,20 @@ def alchemy_panel(gd: GameData, save: dict, runes: dict):
         })
 
     sum_all = sum(c["sumEff"] for c in containers)
+    # nível de item que rende MAIS EXP de cubo agora (base×matching), entre os
+    # níveis reais de gear — leva em conta que subir base compensa perder match
+    gear_levels = sorted({it.get("level") for it in gd.items.values()
+                          if it.get("type") == "GEAR" and it.get("level")})
+    reco_level = (max(gear_levels,
+                      key=lambda L: _item_level_scale(gd, L) * fit_factor(level, L))
+                  if gear_levels else level)
+    reco_match = round(fit_factor(level, reco_level) * 100)  # % de matching nesse nível
     return {
         "cube": {
             "level": level, "exp": round(exp, 1), "need": need,
+            "nextNeed": gd.cube_levels.get(level + 1),   # limiar do nível seguinte
+            "recoLevel": reco_level,                      # nível de item ideal p/ alquimia
+            "recoMatch": reco_match,                      # matching (%) nesse nível
             "maxed": not need or need >= _CUBE_MAX_NEED,
             "pctToNext": (round(exp / need * 100, 1)
                           if need and need < _CUBE_MAX_NEED else None),
@@ -612,6 +630,30 @@ def _stats_with_buff(stats: dict, stat: str, frac: float):
     return s
 
 
+# marcadores (en-US) de skills de UTILIDADE: curam/revivem/escudam — NÃO dão
+# dano, mesmo com delivery AOE (Sanctuary regenera HP, Aegis bloqueia dano).
+_UTIL_MARKERS = ("regenerate", "restore", "revive", "rise again",
+                 "blocks ", "protective aura")
+
+
+def _is_damage_skill(row: dict) -> bool:
+    """True se a skill dá dano direto. Cura/revive/escudo/regen = False."""
+    deliv = (row.get("DamageDeliveryType") or "").strip()
+    if not deliv or deliv == "None":
+        return False                       # Heal, Resurrection, Unyielding Will
+    desc = ((row.get("SkillDescriptionKey_i18n") or {}).get("en-US") or "").lower()
+    return not any(m in desc for m in _UTIL_MARKERS)
+
+
+def _util_kind(row: dict) -> str:
+    desc = ((row.get("SkillDescriptionKey_i18n") or {}).get("en-US") or "").lower()
+    if "revive" in desc or "rise again" in desc:
+        return "reviver"
+    if "blocks " in desc or "protective" in desc:
+        return "escudo"
+    return "cura"
+
+
 def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
     """DPS de ataque basico + skills de cooldown equipadas.
 
@@ -638,14 +680,17 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
     skill = 0.0
     skills_detail = []
     buffs_detail = []
+    utility_detail = []
     buff_dps = 0.0
     cast = max((stats.get("CastSpeed") or 100) / 100.0, 0.1)
     cdr = min((stats.get("CooldownReduction") or 0) / PCT, 0.75)
     for sk in hero_save.get("equippedSKillKey") or []:
         row = gd.skills.get(sk)
-        if not row or row.get("ACTIVATIONTYPE") != "COOLDOWN":
+        act = row.get("ACTIVATIONTYPE") if row else None
+        # COOLDOWN: dispara por tempo; BASEATTACK_COUNT: a cada N ataques básicos
+        if act not in ("COOLDOWN", "BASEATTACK_COUNT"):
             continue
-        cd = row.get("ActivationValue") or 0
+        cd = row.get("ActivationValue") or 0   # COOLDOWN: seg | BASEATTACK_COUNT: nº ataques
         lvl_rows = gd.skill_levels.get(row.get("SkillLevelKey"))
         if not lvl_rows or cd <= 0:
             continue
@@ -654,6 +699,8 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
 
         # --- skill de BUFF (não é dano): escala o DPS do ataque básico ---
         if row.get("SkillBuffType") == "Buff":
+            if act != "COOLDOWN":
+                continue   # buff por contagem de ataque (Skewer/Shock Bolt): stacking complexo
             frac = val / PCT                     # 900 -> 0.9 (+90%)
             p1 = row.get("Param1")
             dur = (p1 / 100.0) if p1 else None   # duração ESTIMADA (não datada)
@@ -682,6 +729,15 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
                 })
             continue
 
+        # --- skill de UTILIDADE (cura/revive/escudo): NÃO é dano ---
+        if not _is_damage_skill(row):
+            utility_detail.append({
+                "key": sk,
+                "name": _name(row.get("SkillNameKey_i18n")) or f"Skill {sk}",
+                "level": lvl, "kind": _util_kind(row), "cooldown": cd,
+            })
+            continue
+
         # --- skill de DANO ---
         # delivery pode vir composto ("Projectile, AOE"): usa o primeiro
         sdel = (row.get("DamageDeliveryType") or "").split(",")[0].strip()
@@ -689,17 +745,22 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
             sdel = delivery
         selem = row.get("DamageType") or element
         per_cast = ad * (val / PCT) * crit * _dmg_bonus(stats, sdel, selem)
-        # cooldown recarrega mais rapido com Cast Speed (wiki/mechanics);
-        # CooldownReduction aplicado por cima [estimativa do cap]
-        cd_eff = cd * (1 - cdr) / cast
-        dps_i = per_cast / cd_eff
+        if act == "COOLDOWN":
+            # cooldown recarrega mais rapido com Cast Speed; CDR por cima
+            cd_eff = cd * (1 - cdr) / cast
+            dps_i = per_cast / cd_eff if cd_eff > 0 else 0.0
+            extra = {"cooldownBase": cd, "cooldown": round(cd_eff, 2)}
+        else:  # BASEATTACK_COUNT: dispara a cada `cd` ataques -> taxa = aps/cd por seg
+            rate = (aps / cd) if cd > 0 else 0.0
+            dps_i = per_cast * rate
+            extra = {"everyAttacks": cd}
         skill += dps_i
         skills_detail.append({
             "key": sk,
             "name": _name(row.get("SkillNameKey_i18n")) or f"Skill {sk}",
             "level": lvl, "perCast": round(per_cast, 1),
-            "cooldownBase": cd, "cooldown": round(cd_eff, 2),
             "dps": round(dps_i, 1), "element": selem, "delivery": sdel,
+            **extra,
         })
 
     return {"statusDps": status_dps, "autoDps": auto, "skillDps": skill,
@@ -714,6 +775,7 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
                          "delivery": delivery},
                 "skills": skills_detail,
                 "buffs": buffs_detail,
+                "utility": utility_detail,
             }}
 
 
@@ -900,39 +962,47 @@ OFFLINE_CAP_SEC = 28800  # 8h (wiki/mechanics)
 
 
 def offline_info(gd: GameData, runes: dict, current_lvl: int, farm_rows: list):
-    """Rendimento offline no estagio atual + melhor estagio para estacionar."""
+    """Rendimento offline no estagio atual + melhor estagio para estacionar.
+
+    `rate(lvl)` = recompensa offline POR HORA (BaseX x KillCount x bonus),
+    VALIDADO contra o popup do jogo (~38,3M exp/h e ~2,1M gold/h no nivel 67).
+    O total ate o cap = rate x capHours (8h). [antes o codigo tratava esse
+    valor como o total de 8h e dividia por 8 — subestimava o offline em 8x.]"""
     unlocked = runes.get("UnlockOfflineReward", 0) > 0
     gb = runes.get("OfflineRewardGoldPercent", 0) / PCT
     eb = runes.get("OfflineRewardExpPercent", 0) / PCT
+    cap_h = OFFLINE_CAP_SEC / 3600
     table = {r["StageLevel"]: r for r in gd.offline_rewards}
 
-    def full(lvl):
+    def rate(lvl):
         row = table.get(lvl)
         if not row:
             return None
         return {"gold": row["BaseGold"] * row["KillCount"] * (1 + gb),
                 "exp": row["BaseExp"] * row["KillCount"] * (1 + eb)}
 
-    cur = full(current_lvl)
+    cur = rate(current_lvl)
     park = None
     for r in farm_rows:
         if not r.get("cleared") and not r.get("current"):
             continue  # nao estacione onde voce ainda nao limpou
-        f = full(r["lvl"])
+        f = rate(r["lvl"])
         if f and (park is None or f["gold"] > park["gold"]):
             park = {"key": r["key"], "label": r["label"], "tag": r["tag"],
                     "name": r["name"], "lvl": r["lvl"],
                     "gold": f["gold"], "exp": f["exp"]}
     return {
         "unlocked": unlocked,
-        "capHours": OFFLINE_CAP_SEC / 3600,
+        "capHours": cap_h,
         "goldBonusPct": round(gb * 100),
         "expBonusPct": round(eb * 100),
-        "current": ({"gold": round(cur["gold"]), "exp": round(cur["exp"]),
-                     "goldPerHour": round(cur["gold"] / 8),
-                     "expPerHour": round(cur["exp"] / 8)} if cur else None),
-        "park": ({**park, "gold": round(park["gold"]), "exp": round(park["exp"])}
-                 if park else None),
+        # current.gold/exp = total ate o cap de 8h; *PerHour = taxa por hora
+        "current": ({"gold": round(cur["gold"] * cap_h),
+                     "exp": round(cur["exp"] * cap_h),
+                     "goldPerHour": round(cur["gold"]),
+                     "expPerHour": round(cur["exp"])} if cur else None),
+        "park": ({**park, "gold": round(park["gold"] * cap_h),
+                  "exp": round(park["exp"] * cap_h)} if park else None),
     }
 
 
@@ -951,8 +1021,22 @@ def _slot_gear_type(hero_row: dict, slot: int):
     return SLOT_FIXED.get(slot)
 
 
-def _power(dps: float, ehp: float):
-    return math.sqrt(max(dps, 0.0) * max(ehp, 0.0))
+# Papel de cada heroi -> peso de DPS no "power" do comparador de gear.
+# Tank prioriza EHP (sobreviver); DPS prioriza dano. Knight/Priest = tank;
+# Ranger/Sorcerer = dps. Hunter/Slayer = dps por padrao (ajustavel).
+HERO_ROLE = {101: "tank", 401: "tank",       # Knight, Priest
+             201: "dps", 301: "dps",         # Ranger, Sorcerer
+             501: "dps", 601: "dps"}          # Hunter, Slayer
+ROLE_WDPS = {"tank": 0.35, "dps": 0.65}       # peso de DPS; peso de EHP = 1 - w
+
+
+def _power(dps: float, ehp: float, w_dps: float = 0.5):
+    """Media geometrica PONDERADA de DPS e EHP. w_dps=0.5 = sqrt(dps*ehp)
+    (peso igual); tank usa w_dps baixo (mais EHP), DPS usa w_dps alto."""
+    d, e = max(dps, 0.0), max(ehp, 0.0)
+    if d <= 0 or e <= 0:
+        return 0.0
+    return d ** w_dps * e ** (1 - w_dps)
 
 
 def _item_brief(gd: GameData, item_key):
@@ -985,10 +1069,12 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
         cur_uids = list(hs.get("equippedItemIds") or [])
         cur_uids += [0] * (10 - len(cur_uids))
 
+        role = HERO_ROLE.get(hs["heroKey"], "dps")
+        w_dps = ROLE_WDPS.get(role, 0.5)
         base_stats = collect_hero(gd, save, hs, runes)
         base_dmg = hero_damage(gd, save, hs, base_stats)
         base_ehp = hero_ehp(base_stats, ref_level, ref_hit, elements)
-        base_power = _power(base_dmg["dps"], base_ehp)
+        base_power = _power(base_dmg["dps"], base_ehp, w_dps)
 
         slots = []
         for slot in range(10):
@@ -1010,7 +1096,7 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
                 st2 = collect_hero(gd, save, hs, runes, equip_override=trial)
                 d2 = hero_damage(gd, save, hs, st2)
                 e2 = hero_ehp(st2, ref_level, ref_hit, elements)
-                d_power = _power(d2["dps"], e2) - base_power
+                d_power = _power(d2["dps"], e2, w_dps) - base_power
                 if d_power > 1e-6 and (best is None or d_power > best["dPower"]):
                     best = {**_item_brief(gd, it["ItemKey"]),
                             "dPower": round(d_power, 1),
@@ -1025,6 +1111,7 @@ def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
                     "upgrade": best,
                 })
         out.append({"heroKey": hs["heroKey"], "cls": hero_row.get("ClassType"),
+                    "role": role, "wDps": w_dps,
                     "basePower": round(base_power, 1), "slots": slots})
     return out
 
@@ -1382,6 +1469,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             "key": hk,
             "name": _name(hero_row.get("HeroNameKey_i18n")) or hero_row.get("ClassType"),
             "cls": hero_row.get("ClassType"),
+            "role": HERO_ROLE.get(hk, "dps"),
             "level": hs.get("HeroLevel"),
             "dps": dmg["dps"], "autoDps": dmg["autoDps"], "skillDps": dmg["skillDps"],
             "buffDps": dmg["buffDps"], "dpsBuffed": dmg["dpsBuffed"],
@@ -1568,14 +1656,16 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     eta, projection = [], []
     for h in heroes:
         hs = hero_saves.get(h["key"]) or {}
-        need = gd.levels.get(h["level"] or 1)
+        cur_lv = h["level"] or 1
+        need = gd.levels.get(cur_lv)
         eps = hero_eps(h)
-        if need is not None:
+        if need is not None and cur_lv < 100:
             missing = max(need - (hs.get("HeroExp") or 0), 0)
-            eta.append({"key": h["key"], "level": h["level"],
+            # "level" = nivel que vai ALCANCAR (cur+1); o eta/exp e ate la
+            eta.append({"key": h["key"], "level": cur_lv + 1, "fromLevel": cur_lv,
                         "expToNext": missing,
                         "etaSec": missing / eps if eps > 0 else None})
-        proj = project_levels(gd, h["level"] or 1, hs.get("HeroExp") or 0, eps,
+        proj = project_levels(gd, cur_lv, hs.get("HeroExp") or 0, eps,
                               stage_lvl=cur_econ["lvl"] if cur_econ else None)
         if proj:
             projection.append({"key": h["key"], "name": h["name"],
@@ -1692,13 +1782,17 @@ def coach_text(sim: dict, state_heroes=None):
                    f"acima do nível da fase atual — a exp lá sofre penalidade "
                    f"de ~{round((1 - cur_fit) * 100)}%. O ranking e a projeção "
                    f"já descontam isso.")
+    eta_by_key = {e["key"]: e for e in (sim.get("levelEta") or [])}
     for pr in (sim.get("projection") or [])[:4]:
-        h4 = pr["horizons"].get("4")
         h24 = pr["horizons"].get("24")
-        if h4:
-            out.append(f"No ritmo medido, {pr['name']} estará no nível "
-                       f"{h4:.0f} em 4h e {h24:.0f} em 24h." if h24 else
-                       f"No ritmo medido, {pr['name']} chega ao nível {h4:.0f} em 4h.")
+        e = eta_by_key.get(pr["key"])
+        if e and e.get("etaSec"):
+            # tempo ate o PROXIMO nivel inteiro (e['level']) + onde estara em 24h
+            msg = (f"No ritmo medido, {pr['name']} chega ao nível {e['level']} "
+                   f"em ~{_fmt_dur(e['etaSec'])}")
+            if h24 is not None:
+                msg += f" e estará em ~{h24:.1f} em 24h"
+            out.append(msg + ".")
             break  # um exemplo basta no texto; o grafico mostra o resto
 
     # 3. push

@@ -408,6 +408,21 @@ table.farm tr.beyond td { opacity: .45; }
   margin-left: 4px; font-family: var(--font-display); text-transform: uppercase;
   letter-spacing: .05em; background: rgba(157, 123, 240, .18); color: var(--color-arc);
 }
+.role-tag {
+  font-size: .58rem; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+  font-family: var(--font-display); text-transform: uppercase; letter-spacing: .06em;
+  border: 1px solid;
+}
+.r-tank { color: var(--color-sky); border-color: var(--color-sky);
+  background: rgba(79, 156, 240, .12); }
+.r-dps { color: var(--color-blood); border-color: var(--color-blood);
+  background: rgba(255, 107, 107, .12); }
+.dmg-util { border-left: 2px solid var(--color-grass); padding-left: 8px; margin-left: -10px; }
+.util-tag {
+  font-size: .6rem; font-weight: 700; padding: 1px 6px; border-radius: 99px;
+  margin-left: 4px; font-family: var(--font-display); text-transform: uppercase;
+  letter-spacing: .05em; background: rgba(63, 207, 142, .16); color: var(--color-grass);
+}
 
 /* ======================== offline ======================== */
 .park { padding: 4px 0 10px; }
@@ -712,11 +727,19 @@ button.link:hover { color: var(--color-blood); }
 
 /* ======================== Cubo / Alquimia ======================== */
 .cube-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* split 50/50: stash | item+preview */
+.cube-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 720px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
+.cube-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cube-right { position: sticky; top: 14px; min-width: 0; }
 .cube-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 
 /* header do cubo */
@@ -766,13 +789,14 @@ button.link:hover { color: var(--color-blood); }
 .cube-chip b { font-family: var(--font-mono); font-size: .92rem; }
 
 /* barra de controles */
-.cube-bar-row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.cube-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+/* controles = mesma largura do grid (a coluna .cube-left), nunca passam dele */
+.cube-bar-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.cube-tabs { display: flex; gap: 5px; flex-wrap: wrap; flex: 1 1 auto; }
 .cube-tab {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 13px; border-radius: 9px; cursor: pointer;
-  font-family: var(--font-display); font-size: .86rem; font-weight: 500;
-  color: var(--color-dim);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  font-family: var(--font-display); font-size: .8rem; font-weight: 500;
+  color: var(--color-dim); white-space: nowrap;
   background: var(--color-surface); border: 1px solid var(--color-edge);
   transition: color .15s, border-color .15s, background .15s;
 }
@@ -785,10 +809,10 @@ button.link:hover { color: var(--color-blood); }
   font-family: var(--font-mono); font-size: .68rem; color: var(--color-dim);
   background: var(--color-ink); border-radius: 99px; padding: 1px 7px;
 }
-.cube-toggles { display: flex; gap: 6px; }
+.cube-toggles { display: flex; gap: 5px; flex-wrap: wrap; }
 .cube-toggle {
-  padding: 7px 12px; border-radius: 9px; cursor: pointer;
-  font-size: .78rem; color: var(--color-dim);
+  padding: 5px 9px; border-radius: 8px; cursor: pointer;
+  font-size: .72rem; color: var(--color-dim); white-space: nowrap;
   background: var(--color-surface); border: 1px solid var(--color-edge);
   transition: color .15s, border-color .15s;
 }
@@ -796,12 +820,11 @@ button.link:hover { color: var(--color-blood); }
 .cube-toggle.on { color: var(--color-arc); border-color: var(--color-arc); }
 .cube-sub { margin-top: -4px; }
 
-/* grade estilo stash: 7×7 fixo (igual ao jogo) */
+/* grade estilo stash: 7×7 fixo; preenche a coluna esquerda (mesma largura dos controles) */
 .cube-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 8px;
-  max-width: 520px;
 }
 .cube-cell {
   position: relative; aspect-ratio: 1; cursor: pointer;
@@ -885,7 +908,56 @@ button.link:hover { color: var(--color-blood); }
 .cube-row i { font-style: normal; color: var(--color-dim); font-size: .82rem; }
 .cube-row b { font-family: var(--font-mono); font-size: .86rem; }
 
+/* barra-preview: quanto este item sobe no cubo */
+.cube-preview {
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--color-ink-2); border: 1px solid var(--color-edge);
+}
+.cube-prev-head {
+  font-family: var(--font-mono); font-size: .66rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--color-dim); margin-bottom: 8px;
+}
+.cube-prev-bar {
+  display: flex; height: 14px; border-radius: 99px; overflow: hidden;
+  background: var(--color-ink); border: 1px solid var(--color-edge);
+}
+.cube-prev-bar .seg-cur { background: linear-gradient(90deg, var(--color-arc), var(--color-sky)); }
+.cube-prev-bar .seg-add {
+  background: repeating-linear-gradient(45deg,
+    var(--color-grass), var(--color-grass) 6px,
+    color-mix(in srgb, var(--color-grass) 70%, #fff) 6px,
+    color-mix(in srgb, var(--color-grass) 70%, #fff) 12px);
+  transition: width .35s cubic-bezier(.2, .8, .2, 1);
+}
+.cube-prev-text {
+  margin-top: 8px; font-family: var(--font-mono); font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+}
+.cube-prev-sub { margin-top: 4px; }
+
+/* lista "melhores pra Alquimia" (estado vazio do detalhe) */
+.cube-detail.empty { padding: 14px; }
+.cube-top-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.cube-top-row {
+  display: flex; align-items: center; gap: 9px; cursor: pointer; text-align: left;
+  width: 100%; padding: 6px 9px; border-radius: 9px;
+  background: var(--color-surface); border: 1px solid var(--color-edge);
+  border-left: 3px solid var(--g, var(--color-edge-2));
+  transition: border-color .15s, background .15s;
+}
+.cube-top-row:hover { background: var(--color-surface-2); border-color: var(--g); }
+.cube-top-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: .85rem;
+}
+.cube-top-row b { font-family: var(--font-mono); font-size: .82rem; }
+.cube-chip-reco { border-color: color-mix(in srgb, var(--color-arc) 55%, var(--color-edge)); }
+.cube-reco-val { display: flex; align-items: baseline; gap: 12px; justify-content: space-between; }
+.reco-pct { font-family: var(--font-mono); font-size: .76rem; color: var(--color-grass); }
+
 @media (max-width: 940px) {
+  .cube-split { grid-template-columns: 1fr; }
+  .cube-right { position: static; }
   .cube-page { grid-template-columns: 1fr; }
   .cube-side { position: static; }
   .cube-head { grid-template-columns: 1fr; }

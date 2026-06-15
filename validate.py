@@ -155,6 +155,9 @@ def t_real_save(gd):
     check("simulate: herois > 0", len(r["heroes"]) > 0)
     check("simulate: statusDps > 0 em todos",
           all(h["statusDps"] > 0 for h in r["heroes"]))
+    check("levelEta: nivel-alvo = atual + 1 (sem off-by-one)",
+          all(e["level"] == e["fromLevel"] + 1 for e in r.get("levelEta", [])),
+          f'{[(e["fromLevel"], e["level"]) for e in r.get("levelEta", [])]}')
     check("simulate: farm tem linhas", len(r["farm"]["rows"]) > 10)
     check("simulate: bestGold nao e ACTBOSS",
           r["farm"]["bestGold"]["type"] != "ACTBOSS")
@@ -250,9 +253,13 @@ def t_offline(gd):
              "cleared": True, "current": False}]
     off = offline_info(gd, {"UnlockOfflineReward": 1,
                             "OfflineRewardGoldPercent": 600}, 40, rows)
-    # lvl 40: BaseGold 98 * KillCount 2730 * 1.6
-    check("offline: gold lvl40 com +60%",
-          abs(off["current"]["gold"] - round(98 * 2730 * 1.6)) <= 1,
+    # lvl 40: BaseGold 98 * KillCount 2730 * 1.6 = recompensa POR HORA
+    per_h = round(98 * 2730 * 1.6)
+    check("offline: gold/h lvl40 com +60%",
+          abs(off["current"]["goldPerHour"] - per_h) <= 1,
+          f"got {off['current']}")
+    check("offline: total 8h = por-hora x cap (x8)",
+          abs(off["current"]["gold"] - per_h * off["capHours"]) <= 1,
           f"got {off['current']}")
     check("offline: park escolhido", off["park"] and off["park"]["lvl"] == 40)
 
@@ -271,6 +278,21 @@ def t_api():
         check("API viva: serve o frontend React", "/assets/index" in html)
     except Exception as e:
         check("API viva", False, str(e))
+
+
+def t_util_not_damage(gd):
+    """Skills de cura/revive/escudo NÃO podem aparecer como dano (Heal, etc.)."""
+    from simulator import _is_damage_skill, GameData
+    # Heal=40101 (cura, deliv None), Resurrection=40601, Sanctuary=40401 (regen AOE),
+    # Aegis Field=10401 (escudo AOE) -> nenhum dá dano
+    for sk in (40101, 40601, 40401, 10401):
+        row = gd.skills.get(sk)
+        check(f"skill {sk} classificada como NÃO-dano", not _is_damage_skill(row),
+              f"{(row.get('SkillNameKey_i18n') or {}).get('en-US')}")
+    # e um de dano de verdade segue como dano
+    check("skill de dano (Fireball 30101) segue dano", _is_damage_skill(gd.skills.get(30101)))
+    check("skill de dano (Shield Charge 10201, tem 'shield') segue dano",
+          _is_damage_skill(gd.skills.get(10201)))
 
 
 def t_buff_dps(gd):
@@ -311,10 +333,26 @@ def t_chaos_resist():
     check("ChaosResistance reduz chaos (EHP sobe)", chaos_res > chaos0 + 1)
 
 
+def t_role_power():
+    """Peso por papel: tank valoriza +EHP, DPS valoriza +DPS. w=0.5 = sqrt."""
+    from simulator import _power, ROLE_WDPS
+    d = e = 1000.0
+    check("_power(0.5) = sqrt(dps*ehp)", abs(_power(d, e, 0.5) - (d * e) ** 0.5) < 1e-6)
+    bt = _power(d, e, ROLE_WDPS["tank"])
+    check("tank: +EHP vale mais que +DPS",
+          (_power(d, e * 1.2, ROLE_WDPS["tank"]) - bt) >
+          (_power(d * 1.2, e, ROLE_WDPS["tank"]) - bt))
+    bp = _power(d, e, ROLE_WDPS["dps"])
+    check("dps: +DPS vale mais que +EHP",
+          (_power(d * 1.2, e, ROLE_WDPS["dps"]) - bp) >
+          (_power(d, e * 1.2, ROLE_WDPS["dps"]) - bp))
+
+
 if __name__ == "__main__":
     t_stacking()
     t_crit()
     t_chaos_resist()
+    t_role_power()
     t_mitigation()
     t_rune_mapping()
     t_fit_recovery()
@@ -322,6 +360,7 @@ if __name__ == "__main__":
     t_fit_single_manual()
     t_fit_factor()
     gd = GameData(ROOT / "gamedata")
+    t_util_not_damage(gd)
     t_buff_dps(gd)
     save = t_real_save(gd)
     t_econ_scale(gd, save)

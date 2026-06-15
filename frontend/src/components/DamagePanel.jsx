@@ -1,6 +1,7 @@
 import React from "react";
 import { fmt } from "../format.js";
 import { elemPt } from "../statNames.js";
+import { RoleTag } from "./GearPanel.jsx";
 
 const ELEM_CLASS = { Fire: "e-fire", Cold: "e-cold", Lightning: "e-light", Chaos: "e-chaos", Physical: "e-phys" };
 
@@ -12,20 +13,16 @@ export default function DamagePanel({ heroes }) {
   return (
     <section className="sec">
       <h2>Dano real — por skill</h2>
-      <p className="muted small dmg-note">
-        O painel de Status do jogo mostra só o ataque básico, sem bônus
-        elemental. Aqui está o dano que sai de verdade. Skills de <b>buff</b> (ex.:
-        Surto Veloz) não dão dano — elas aceleram o ataque básico.
-      </p>
       <div className="dmg-grid">
         {heroes.map((h) => {
           const a = h.damage?.auto;
           const skills = h.damage?.skills || [];
           const buffs = h.damage?.buffs || [];
+          const utility = h.damage?.utility || [];
           return (
             <div className="dmg-hero" key={h.key}>
               <div className="dmg-head">
-                <b>{h.name}</b>
+                <b>{h.name}</b> <RoleTag role={h.role} />
                 <span className="dmg-total">
                   {fmt(h.dps)} dps efetivo
                   {h.buffDps > 0 && (
@@ -54,8 +51,11 @@ export default function DamagePanel({ heroes }) {
                     <Elem el={s.element} />
                   </span>
                   <span className="dmg-calc">
-                    {fmt(s.perCast)} por uso · recarga {s.cooldown}s ={" "}
-                    <b>{fmt(s.dps)}/s</b>
+                    {fmt(s.perCast)} por uso ·{" "}
+                    {s.everyAttacks != null
+                      ? `a cada ${s.everyAttacks} ataques`
+                      : `recarga ${s.cooldown}s`}{" "}
+                    = <b>{fmt(s.dps)}/s</b>
                   </span>
                 </div>
               ))}
@@ -82,19 +82,24 @@ export default function DamagePanel({ heroes }) {
                   </span>
                 </div>
               ))}
-              {skills.length === 0 && buffs.length === 0 && (
+              {utility.map((u) => (
+                <div className="dmg-row dmg-util" key={"u" + u.key}>
+                  <span>
+                    {u.name} <span className="muted">lv {u.level}</span>{" "}
+                    <span className="util-tag">{u.kind}</span>
+                  </span>
+                  <span className="dmg-calc muted">
+                    utilidade · recarga {u.cooldown}s · não dá dano
+                  </span>
+                </div>
+              ))}
+              {skills.length === 0 && buffs.length === 0 && utility.length === 0 && (
                 <div className="dmg-row muted">sem skills de recarga equipadas</div>
               )}
             </div>
           );
         })}
       </div>
-      {heroes.some((h) => (h.damage?.buffs || []).some((b) => b.durEst != null)) && (
-        <p className="muted small dmg-note" style={{ marginTop: 10 }}>
-          Duração do buff vem de Param1⁄100 (confirmado in-game na Surto Veloz: 7s). O
-          valor <b>ativo</b> é exato; a <b>média</b> usa o uptime = duração⁄recarga.
-        </p>
-      )}
     </section>
   );
 }

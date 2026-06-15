@@ -67,25 +67,87 @@ function Cell({ e, selected, onClick }) {
   );
 }
 
-function Detail({ e, cube, mult }) {
+function PreviewBar({ e, cube }) {
+  const need = cube?.need;
+  if (!e.ok || !need) return null;
+  const exp = cube.exp;
+  const eff = e.eff;
+  const newExp = exp + eff;
+  // simula subir até 2 níveis com 1 item (need atual + nextNeed)
+  let gained = 0,
+    rem = newExp;
+  if (rem >= need) {
+    gained = 1;
+    rem -= need;
+    if (cube.nextNeed && rem >= cube.nextNeed) {
+      gained = 2;
+      rem -= cube.nextNeed;
+    }
+  }
+  const curPct = Math.min(100, (exp / need) * 100);
+  const addPct = Math.min(100 - curPct, (eff / need) * 100);
+  const toLevel = gained === 0 ? Math.max(1, Math.ceil((need - exp) / eff)) : null;
+  return (
+    <div className="cube-preview">
+      <div className="cube-prev-head">cubo depois da Alquimia deste item</div>
+      <div className="cube-prev-bar">
+        <span className="seg-cur" style={{ width: curPct + "%" }} />
+        <span className="seg-add" style={{ width: addPct + "%" }} />
+      </div>
+      <div className="cube-prev-text">
+        {gained > 0 ? (
+          <>
+            <b className="v-exp">
+              Lv {cube.level} → Lv {cube.level + gained}
+            </b>{" "}
+            <span className="muted">(sobra {fmt(Math.round(rem))} EXP)</span>
+          </>
+        ) : (
+          <>
+            <b>{fmt(exp)}</b> + <b className="v-exp">{fmt(eff)}</b> ={" "}
+            {fmt(Math.round(newExp))} / {fmt(need)}{" "}
+            <span className="muted">({Math.round((newExp / need) * 100)}%)</span>
+          </>
+        )}
+      </div>
+      {toLevel != null && (
+        <div className="cube-prev-sub muted small">
+          faltam ~<b>{fmt(toLevel)}</b> deste item pra subir 1 nível
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({ e, cube, mult, top, onPick }) {
   if (!e)
     return (
       <div className="cube-detail empty">
-        <p className="muted small">
-          Clique num item pra ver o EXP que ele dá ao cubo. As células são
-          coloridas por <b>grau</b> e mostram o EXP (com seus buffs) embaixo.
-        </p>
-        <p className="muted small" style={{ marginTop: 10 }}>
-          O EXP depende de <b>grau × tipo de gear × nível do item</b> — <i>não</i> do
-          nível do cubo. Por isso um Raro L30 pode dar mais que um Comum L50.
-        </p>
+        <div className="cube-prev-head">Melhores itens para alquimia no nível do cubo atual</div>
+        <div className="cube-top-list">
+          {(top || []).map((it) => {
+            const tg = gradeOf(it.grade);
+            return (
+              <button
+                key={it.uid}
+                className="cube-top-row"
+                style={{ "--g": tg.c }}
+                onClick={() => onPick && onPick(it)}
+              >
+                <ItemIcon e={it} size={30} />
+                <span className="cube-top-name">{it.name}</span>
+                <span className="muted small">L{it.level}</span>
+                <b className="v-exp">{fmt(it.eff)}</b>
+              </button>
+            );
+          })}
+          {(!top || top.length === 0) && (
+            <p className="muted small">Nenhum item alquimizável.</p>
+          )}
+        </div>
       </div>
     );
   const g = gradeOf(e.grade);
-  const need = cube?.need;
-  const pctOfLevel = e.ok && need ? (e.eff / need) * 100 : null;
-  const toLevel =
-    e.ok && need && cube ? Math.max(1, Math.ceil((need - cube.exp) / e.eff)) : null;
   return (
     <div className="cube-detail" style={{ "--g": g.c }}>
       <div className="cube-detail-head">
@@ -114,30 +176,31 @@ function Detail({ e, cube, mult }) {
               <i>EXP base</i>
               <b>{fmt(e.base)}</b>
             </div>
+            {e.match != null && (
+              <div className="cube-row">
+                <i>level matching (item Lv{e.level} × cubo Lv{cube?.level})</i>
+                <b
+                  className={
+                    e.match < 0.5 ? "badge-red" : e.match >= 0.95 ? "badge-green" : ""
+                  }
+                >
+                  {Math.round(e.match * 100)}%
+                </b>
+              </div>
+            )}
             <div className="cube-row">
               <i>seu buff</i>
               <b className="v-exp">×{mult.toFixed(2)}</b>
             </div>
-            {pctOfLevel != null && (
-              <div className="cube-row">
-                <i>do nível atual do cubo</i>
-                <b>{pctOfLevel < 0.1 ? "<0,1" : pctOfLevel.toFixed(1)}%</b>
-              </div>
-            )}
-            {toLevel != null && (
-              <div className="cube-row">
-                <i>faltam ~deste item p/ subir</i>
-                <b>{fmt(toLevel)}</b>
-              </div>
-            )}
           </div>
+          <PreviewBar e={e} cube={cube} />
         </>
       ) : (
         <p className="muted small" style={{ marginTop: 12 }}>
           {e.equipped
-            ? "Equipado — não pode ser alquimizado."
+            ? "Equipado — não entra na Alquimia."
             : e.blocked
-            ? "Bloqueado — não pode ser alquimizado."
+            ? "Bloqueado — não entra na Alquimia."
             : "Sem valor de cubo."}
         </p>
       )}
@@ -149,7 +212,7 @@ export default function CubePanel({ alchemy }) {
   const [cid, setCid] = useState("stash");
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState(null);
-  const [sortExp, setSortExp] = useState(false);
+  const [sort, setSort] = useState("none"); // none | exp | level
   const [onlyAlch, setOnlyAlch] = useState(false);
 
   const containers = alchemy?.containers || [];
@@ -158,12 +221,23 @@ export default function CubePanel({ alchemy }) {
   const slots = useMemo(() => {
     if (!cont) return [];
     let s = cont.slots;
-    if (sortExp || onlyAlch) {
+    if (sort !== "none" || onlyAlch) {
       s = s.filter((e) => e && (!onlyAlch || e.ok));
-      if (sortExp) s = [...s].sort((a, b) => b.eff - a.eff);
+      if (sort === "exp") s = [...s].sort((a, b) => b.eff - a.eff);
+      else if (sort === "level")
+        s = [...s].sort((a, b) => (b.level || 0) - (a.level || 0));
     }
     return s;
-  }, [cont, sortExp, onlyAlch]);
+  }, [cont, sort, onlyAlch]);
+
+  // top itens (maior EXP efetivo) pra mostrar quando nada está selecionado
+  const topItems = useMemo(
+    () =>
+      (containers.flatMap((c) => c.slots).filter((x) => x && x.ok) || [])
+        .sort((a, b) => b.eff - a.eff)
+        .slice(0, 6),
+    [containers]
+  );
 
   if (!alchemy)
     return (
@@ -184,9 +258,8 @@ export default function CubePanel({ alchemy }) {
 
   return (
     <main className="page cube-page no-rail">
-      <div className="cube-main">
-        {/* header do cubo */}
-        <div className="cube-head">
+      {/* header do cubo (largura total) */}
+      <div className="cube-head">
           <div className="cube-badge">
             <span className="cube-badge-k">Cubo</span>
             <span className="cube-badge-lv">Lv {cube.level}</span>
@@ -210,7 +283,7 @@ export default function CubePanel({ alchemy }) {
               <b className="v-exp">+{alchemy.buff.pct}%</b>
             </div>
             <div className="cube-chip">
-              <i>alquimizar tudo</i>
+              <i>Alquimia de tudo</i>
               <b>
                 Lv {cube.level} → <span className="v-exp">Lv {proj.level}</span>
                 {proj.gained > 0 && ` (+${proj.gained})`}
@@ -220,9 +293,23 @@ export default function CubePanel({ alchemy }) {
               <i>EXP no inventário+stash</i>
               <b>{fmt(alchemy.sumAll)}</b>
             </div>
+            {cube.recoLevel != null && (
+              <div className="cube-chip cube-chip-reco">
+                <i>nível de equip. recomendado p/ alquimia</i>
+                <b className="cube-reco-val">
+                  <span className="v-exp">Lv {cube.recoLevel}</span>
+                  {cube.recoMatch != null && (
+                    <span className="reco-pct">{cube.recoMatch}% matching</span>
+                  )}
+                </b>
+              </div>
+            )}
           </div>
         </div>
 
+      {/* split 50/50: stash à esquerda, item+preview à direita */}
+      <div className="cube-split">
+        <div className="cube-left">
         {/* controles: containers + ordenação */}
         <div className="cube-bar-row">
           <div className="cube-tabs">
@@ -243,13 +330,22 @@ export default function CubePanel({ alchemy }) {
           </div>
           <div className="cube-toggles">
             <button
-              className={"cube-toggle" + (sortExp ? " on" : "")}
+              className={"cube-toggle" + (sort === "exp" ? " on" : "")}
               onClick={() => {
-                setSortExp((v) => !v);
+                setSort((v) => (v === "exp" ? "none" : "exp"));
                 setPage(0);
               }}
             >
               ordenar por EXP
+            </button>
+            <button
+              className={"cube-toggle" + (sort === "level" ? " on" : "")}
+              onClick={() => {
+                setSort((v) => (v === "level" ? "none" : "level"));
+                setPage(0);
+              }}
+            >
+              ordenar por level
             </button>
             <button
               className={"cube-toggle" + (onlyAlch ? " on" : "")}
@@ -296,11 +392,11 @@ export default function CubePanel({ alchemy }) {
             ))}
           </div>
         )}
+        </div>
+        <aside className="cube-right">
+          <Detail e={sel} cube={cube} mult={mult} top={topItems} onPick={setSel} />
+        </aside>
       </div>
-
-      <aside className="cube-side">
-        <Detail e={sel} cube={cube} mult={mult} />
-      </aside>
     </main>
   );
 }
