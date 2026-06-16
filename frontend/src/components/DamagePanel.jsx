@@ -102,10 +102,14 @@ export default function DamagePanel({ heroes }) {
                     <span className="util-tag">{u.kind}</span>
                   </span>
                   <span className="dmg-calc">
-                    {u.healPct != null ? (
+                    {u.healAmount != null ? (
                       <>
-                        cura <b className="v-exp">{u.healPct}% do HP máx</b>{" "}
-                        <span className="muted">· a cada {u.cooldown}s</span>
+                        cura <b className="v-exp">{fmt(u.healAmount)} de vida</b>{" "}
+                        <span className="muted">
+                          ({u.healPct}% HP máx
+                          {u.healBonus ? ` · +${u.healBonus}% cura` : ""}) · a cada{" "}
+                          {u.cooldown}s
+                        </span>
                       </>
                     ) : (
                       <span className="muted">utilidade · recarga {u.cooldown}s</span>

@@ -276,6 +276,12 @@ def _rune_to_hero_stat(stat_type: str):
     return rest, "FLAT" if rest in _RUNE_FLAT else "ADDITIVE"
 
 
+# Stats que são "% de aumento PURO" (não têm base própria): FLAT e ADDITIVE
+# apenas SOMAM as fontes, não multiplicam. Ex.: SkillHealIncrease — gear dá 175
+# FLAT (+17,5%) e a passiva 700 ADDITIVE (+70%); total = 87,5%, não 175×1,7.
+_SUM_STATS = {"SkillHealIncrease"}
+
+
 class StatBag:
     """Acumula modificadores e aplica a formula de stacking documentada."""
 
@@ -306,6 +312,10 @@ class StatBag:
     def final(self):
         out = {}
         for stat in set(self.flat) | set(self.add) | set(self.mult):
+            if stat in _SUM_STATS:   # % puro: soma as fontes (flat + additive)
+                out[stat] = ((self.flat.get(stat, 0.0) + self.add.get(stat, 0.0))
+                             * self.mult.get(stat, 1.0))
+                continue
             base = self.flat.get(stat, 0.0)
             out[stat] = (base * (1 + self.add.get(stat, 0.0) / PCT)
                          * self.mult.get(stat, 1.0))
@@ -770,9 +780,16 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
         # --- skill de UTILIDADE (cura/revive/escudo): NÃO é dano ---
         if not _is_damage_skill(row):
             desc = ((row.get("SkillDescriptionKey_i18n") or {}).get("en-US") or "").lower()
-            # cura % do HP máx do alvo: o Value da tabela É o {0}% da descrição
-            heal_pct = (round(val) if ("restore" in desc and "hp" in desc and "%" in desc)
-                        else None)
+            # cura = {0}% do HP MÁX do alvo. Escala do Value igual aos outros
+            # skills (validado nos buffs): %% mostrado = val/10; fração = val/PCT.
+            heal_pct = heal_amt = heal_bonus = None
+            if "restore" in desc and "hp" in desc and "%" in desc:
+                heal_pct = round(val / 10.0, 1)                 # 180 -> 18.0%
+                # +% de cura da ÁRVORE/gear (SkillHealIncrease): mesma escala /PCT
+                # dos outros "increase" (validado p/ dano). 297.5 -> +29.75%.
+                boost = (stats.get("SkillHealIncrease") or 0) / PCT
+                heal_amt = round(val / PCT * (stats.get("MaxHp") or 0) * (1 + boost))
+                heal_bonus = round(boost * 100, 1) if boost else None
             # recarga efetiva (recarga/cast da healer = cura mais vezes)
             cd_eff = (cd * (1 - cdr) / cast) if (act == "COOLDOWN" and cast > 0) else cd
             utility_detail.append({
@@ -780,7 +797,7 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
                 "name": _name(row.get("SkillNameKey_i18n")) or f"Skill {sk}",
                 "level": lvl, "kind": _util_kind(row),
                 "cooldown": round(cd_eff, 2), "cooldownBase": cd,
-                "healPct": heal_pct,
+                "healPct": heal_pct, "healAmount": heal_amt, "healBonus": heal_bonus,
             })
             continue
 
