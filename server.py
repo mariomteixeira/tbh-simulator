@@ -41,6 +41,48 @@ STORE_PATH = ROOT / "data" / "store.json"
 HISTORY_MAX = 1000  # pontos de historico devolvidos pela API
 
 
+def _compute_version() -> str:
+    """Versao do copilot em execucao, computada uma vez no startup.
+    Prioridade:
+      1. arquivo .version na raiz (escrito pelo updater.py: sha curto do deploy);
+      2. version do frontend/package.json + sha curto do git (se disponivel);
+      3. so a version do package.json; senao "dev".
+    Nunca lanca excecao."""
+    # (1) .version do deploy (updater.py)
+    try:
+        vf = ROOT / ".version"
+        if vf.exists():
+            sha = vf.read_text(encoding="utf-8").strip()
+            if sha:
+                return sha
+    except Exception:
+        pass
+    # version do package.json (base para 2 e 3)
+    pkg_version = None
+    try:
+        import json
+        pkg = json.loads((ROOT / "frontend" / "package.json")
+                         .read_text(encoding="utf-8"))
+        pkg_version = (pkg.get("version") or "").strip() or None
+    except Exception:
+        pkg_version = None
+    # (2) package.json + sha curto do git
+    try:
+        import subprocess
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             cwd=str(ROOT), capture_output=True, text=True,
+                             timeout=5).stdout.strip()
+        if sha:
+            return f"{pkg_version} · {sha}" if pkg_version else sha
+    except Exception:
+        pass
+    # (3) so a version do package.json, senao "dev"
+    return pkg_version or "dev"
+
+
+VERSION = _compute_version()
+
+
 class CalibrationIn(BaseModel):
     stage: int          # chave do estagio (ex.: 2109)
     clearSec: float     # tempo de uma run EM SEGUNDOS (cronometrado)
@@ -206,6 +248,7 @@ class SaveWatcher:
     def snapshot(self):
         with self.lock:
             return {
+                "version": VERSION,
                 "status": {
                     "savePath": str(self.save_path),
                     "saveFound": self.save_path.exists(),
@@ -297,6 +340,7 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
     # icones de itens: baixados sob demanda do wiki e cacheados localmente.
     # (o wiki bloqueia user-agent nao-navegador; mandamos um de Chrome)
     item_icon_dir = GAMEDATA_DIR / "icons" / "items"
+    hero_icon_dir = GAMEDATA_DIR / "icons" / "heroes"
     icon_ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                              "AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
 
@@ -317,6 +361,29 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
                 if not data.startswith(b"\x89PNG"):
                     return Response(status_code=404)
                 item_icon_dir.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+            except Exception:
+                return Response(status_code=404)
+        return FileResponse(dest, media_type="image/png",
+                            headers={"Cache-Control": "max-age=604800"})
+
+    @app.get("/heroicon/{key}.png")
+    def hero_icon(key: int):
+        dest = hero_icon_dir / f"{key}.png"
+        if not dest.exists():
+            hero = watcher.gamedata.heroes.get(key) if watcher.gamedata else None
+            ipath = hero.get("icon") if hero else None
+            if not ipath:
+                return Response(status_code=404)
+            try:
+                import urllib.request
+                req = urllib.request.Request("https://taskbarhero.wiki" + ipath,
+                                             headers=icon_ua)
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = r.read()
+                if not data.startswith(b"\x89PNG"):
+                    return Response(status_code=404)
+                hero_icon_dir.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
             except Exception:
                 return Response(status_code=404)

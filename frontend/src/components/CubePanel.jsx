@@ -1,31 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { fmt } from "../format.js";
+import { gradeOf, gearPt } from "../grades.js";
 
-/* cores/labels por grau — paleta REAL do jogo (variáveis --color-* da wiki).
-   common e topos (beyond/celestial/cosmic) não têm cor flat no jogo (estilo
-   especial); pra esses uso tons distintos próprios. */
-const GRADES = {
-  COMMON: { label: "Comum", c: "#b8c0cc" },
-  UNCOMMON: { label: "Incomum", c: "#54fc0c" },
-  RARE: { label: "Raro", c: "#2f8bfc" },
-  LEGENDARY: { label: "Lendário", c: "#fc9c0c" }, // dourado/amarelo (jogo)
-  IMMORTAL: { label: "Imortal", c: "#fc2424" }, // vermelho (jogo)
-  ARCANA: { label: "Arcana", c: "#b40cfc" },
-  BEYOND: { label: "Além", c: "#19e6c3" },
-  CELESTIAL: { label: "Celestial", c: "#7ad7ff" },
-  DIVINE: { label: "Divino", c: "#fce454" },
-  COSMIC: { label: "Cósmico", c: "#ff5ea8" },
-};
-const GEAR_PT = {
-  SWORD: "Espada", AXE: "Machado", BOW: "Arco", CROSSBOW: "Besta",
-  SCEPTER: "Cetro", STAFF: "Cajado", ARROW: "Flecha", BOLT: "Virote",
-  ORB: "Orbe", SHIELD: "Escudo", HATCHET: "Machadinha", TOME: "Tomo",
-  ARMOR: "Armadura", HELMET: "Elmo", GLOVES: "Luvas", BOOTS: "Botas",
-  AMULET: "Amuleto", EARING: "Brinco", RING: "Anel", BRACER: "Bracelete",
-};
-const gradeOf = (g) => GRADES[g] || { label: g || "—", c: "#768192" };
 const typeLabel = (e) =>
-  e.type === "GEAR" ? GEAR_PT[e.gear] || e.gear : e.type === "MATERIAL" ? "Material" : e.type;
+  e.type === "GEAR" ? gearPt(e.gear) || e.gear : e.type === "MATERIAL" ? "Material" : e.type;
 const PAGE = 49; // stash do jogo é 7×7
 
 function ItemIcon({ e, size = 40 }) {
@@ -155,9 +133,13 @@ function Detail({ e, cube, mult, top, onPick }) {
         <div>
           <div className="cube-detail-name">{e.name}</div>
           <div className="cube-detail-tags">
-            <span className="grade-tag" style={{ color: g.c, borderColor: g.c }}>
-              {g.label}
-            </span>
+            {g.special ? (
+              <span className="grade-tag gtag special">{g.label}</span>
+            ) : (
+              <span className="grade-tag" style={{ color: g.c, borderColor: g.c }}>
+                {g.label}
+              </span>
+            )}
             <span className="muted small">
               {typeLabel(e)} · L{e.level ?? "—"}
             </span>

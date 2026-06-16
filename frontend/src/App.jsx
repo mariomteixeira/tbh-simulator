@@ -2,28 +2,65 @@ import React, { useEffect, useState } from "react";
 import { useSnapshot } from "./useSnapshot.js";
 import { fmt, fmtDur, fmtHours, timeAgo } from "./format.js";
 import ModelTab from "./components/ModelTab.jsx";
-import Coach from "./components/Coach.jsx";
 import FarmTable from "./components/FarmTable.jsx";
 import Heroes from "./components/Heroes.jsx";
 import GearPanel from "./components/GearPanel.jsx";
 import DamagePanel from "./components/DamagePanel.jsx";
+import CombatPanel from "./components/CombatPanel.jsx";
 import OfflinePanel from "./components/OfflinePanel.jsx";
-import GoldChart from "./components/GoldChart.jsx";
-import ProjectionChart from "./components/ProjectionChart.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 import RunesPage from "./components/RunesPage.jsx";
 import CubePanel from "./components/CubePanel.jsx";
 
 const ROUTES = [
-  { id: "overview", hash: "#/", label: "Visão geral", group: "Painel" },
-  { id: "farm", hash: "#/farm", label: "Farm", group: "Painel" },
-  { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel" },
-  { id: "cube", hash: "#/cubo", label: "Cubo", group: "Painel" },
-  { id: "runes", hash: "#/runas", label: "Runas", group: "Painel" },
-  { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel" },
-  { id: "offline", hash: "#/offline", label: "Offline", group: "Painel" },
-  { id: "model", hash: "#/modelo", label: "Modelo & Calibração", group: "Sistema" },
+  { id: "farm", hash: "#/", label: "Farm", group: "Painel", icon: "i-farm" },
+  { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel", icon: "i-box" },
+  { id: "cube", hash: "#/cubo", label: "Cubo", group: "Painel", icon: "i-cube" },
+  { id: "runes", hash: "#/runas", label: "Runas", group: "Painel", icon: "i-rune" },
+  { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel", icon: "i-hero" },
+  { id: "offline", hash: "#/offline", label: "Offline", group: "Painel", icon: "i-off" },
+  { id: "model", hash: "#/modelo", label: "Calibração", group: "Sistema", icon: "i-model" },
 ];
+
+/* ícones pixel (silhuetas crispEdges) — copiados do mockup; injetados 1x no shell */
+function NavIcons() {
+  return (
+    <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+      <defs>
+        <g id="i-farm">
+          <rect x="7" y="2" width="2" height="7" />
+          <rect x="4" y="9" width="8" height="2" />
+          <rect x="7" y="11" width="2" height="3" />
+        </g>
+        <g id="i-box">
+          <rect x="3" y="4" width="10" height="2" />
+          <rect x="3" y="7" width="10" height="6" />
+        </g>
+        <g id="i-cube">
+          <path d="M4 4h8v8H4z" fill="none" stroke="currentColor" strokeWidth="2" />
+          <rect x="4" y="4" width="8" height="2" />
+        </g>
+        <g id="i-rune">
+          <path d="M8 2l5 5-5 7-5-7z" />
+        </g>
+        <g id="i-hero">
+          <path d="M3 3h10v5l-5 6-5-6z" />
+        </g>
+        <g id="i-off">
+          <path d="M10 2a6 6 0 1 0 0 12 7 7 0 0 1 0-12z" />
+        </g>
+        <g id="i-model">
+          <rect x="3" y="3" width="2" height="10" />
+          <rect x="2" y="6" width="4" height="2" />
+          <rect x="7" y="3" width="2" height="10" />
+          <rect x="6" y="9" width="4" height="2" />
+          <rect x="11" y="3" width="2" height="10" />
+          <rect x="10" y="5" width="4" height="2" />
+        </g>
+      </defs>
+    </svg>
+  );
+}
 
 function useRoute() {
   const find = () =>
@@ -66,94 +103,6 @@ function StageRef({ r }) {
 }
 
 /* ---------- páginas ---------- */
-function Overview({ d, sim, st, sr }) {
-  const goldRate =
-    sr && sr.dt_hours > 0
-      ? sr.gold_per_hour === null
-        ? "gold gasto na sessão"
-        : fmt(sr.gold_per_hour) + "/h líquido"
-      : "aguardando 2º save…";
-  const expSession = sr?.exp_per_hour
-    ? Object.values(sr.exp_per_hour).reduce((a, b) => a + (b || 0), 0)
-    : null;
-  return {
-    main: (
-      <>
-        <div className="kpis">
-          <div className="kpi">
-            <span className="kpi-label">Gold</span>
-            <span className="kpi-value gold">{fmt(st.gold)}</span>
-            <span className="kpi-sub">{goldRate}</span>
-          </div>
-          <div className="kpi">
-            <span className="kpi-label">DPS do time</span>
-            <span className="kpi-value">{sim ? fmt(sim.party.dps) : "—"}</span>
-            <span className="kpi-sub">{sim ? sim.calibration.source : "—"}</span>
-          </div>
-          <div className="kpi">
-            <span className="kpi-label">Estágio</span>
-            <span className="kpi-value">{st.currentStage}</span>
-            <span className="kpi-sub">máx concluído {st.maxStage}</span>
-          </div>
-          <div className="kpi">
-            <span className="kpi-label">Tempo de jogo</span>
-            <span className="kpi-value">{(st.playTime / 3600).toFixed(1)}h</span>
-            <span className="kpi-sub">
-              {sr && sr.dt_hours > 0
-                ? "sessão: " + fmtHours(sr.dt_hours)
-                : "sessão começando"}
-            </span>
-          </div>
-        </div>
-        {sim?.coach && <Coach paragraphs={sim.coach} />}
-        <div className="charts-duo">
-          <GoldChart history={d.history} />
-          {sim?.projection?.length > 0 && (
-            <ProjectionChart projection={sim.projection} />
-          )}
-        </div>
-      </>
-    ),
-    rail: (
-      <>
-        <RailRows
-          title="Sessão"
-          rows={[
-            ["gold/h", sr?.gold_per_hour != null ? fmt(sr.gold_per_hour) : "—", "v-gold"],
-            ["exp/h", expSession ? fmt(expSession) : "—", "v-exp"],
-            ["medida em", sr?.dt_hours > 0 ? fmtHours(sr.dt_hours) : "—"],
-          ]}
-        />
-        {sim && (
-          <RailRows
-            title="Bônus ativos"
-            rows={[
-              ["gold", "+" + sim.goldBonusPct + "%", "v-gold"],
-              ["exp", "+" + sim.expBonusPct + "%", "v-exp"],
-              sim.farm?.dropBonus && ["bau normal", "+" + sim.farm.dropBonus.normal + "%"],
-              sim.farm?.dropBonus && ["bau do boss", "+" + sim.farm.dropBonus.boss + "%"],
-            ]}
-          />
-        )}
-        {sim?.offline?.park && (
-          <div>
-            <h3>Estacionar offline</h3>
-            <div className="park">
-              <div className="park-stage">
-                <StageRef r={sim.offline.park} /> {sim.offline.park.name}
-              </div>
-              <div className="park-yield">
-                <span className="v-gold">{fmt(sim.offline.park.gold)}</span> ·{" "}
-                <span className="v-exp">{fmt(sim.offline.park.exp)}</span> em 8h
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    ),
-  };
-}
-
 function CeilingPicker({ farm }) {
   const opts = (farm.rows || []).filter(
     (r) => r.cleared && r.type !== "ACTBOSS"
@@ -284,6 +233,7 @@ function HeroesPage({ d, sim, st }) {
   return {
     main: (
       <>
+        {sim?.combat?.length > 0 && <CombatPanel combat={sim.combat} />}
         {sim?.heroes?.length > 0 && <DamagePanel heroes={sim.heroes} />}
         {sim?.gear && <GearPanel gear={sim.gear} />}
       </>
@@ -315,6 +265,7 @@ export default function App() {
   const sim = d?.sim;
   const status = d?.status;
   const sr = d?.sessionRates;
+  const version = d?.version;
 
   const msgs = [];
   if (status) {
@@ -326,8 +277,7 @@ export default function App() {
 
   let page = { main: null, rail: null };
   if (st) {
-    if (route.id === "overview") page = Overview({ d, sim, st, sr });
-    else if (route.id === "farm") page = FarmPage({ sim });
+    if (route.id === "farm") page = FarmPage({ sim });
     else if (route.id === "boxes") page = BoxesPage({ d, sim });
     else if (route.id === "heroes") page = HeroesPage({ d, sim, st });
     else if (route.id === "offline") page = OfflinePage({ sim });
@@ -338,6 +288,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <NavIcons />
       <aside className="sidenav">
         <div className="brand">
           <span className="brand-mark">TBH</span>
@@ -353,9 +304,9 @@ export default function App() {
                   href={r.hash}
                   className={"nav-item" + (route.id === r.id ? " active" : "")}
                 >
-                  <span className="idx">
-                    {String(ROUTES.indexOf(r) + 1).padStart(2, "0")}
-                  </span>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <use href={"#" + r.icon} />
+                  </svg>
                   {r.label}
                 </a>
               ))}
@@ -380,7 +331,15 @@ export default function App() {
           </div>
           <div className="topbar-right">
             {st && <span>estágio {st.currentStage}</span>}
-            <span className={"conn-dot " + (online ? "ok" : "bad")} />
+            <span className="live">
+              {online ? (
+                <span className="dot" />
+              ) : (
+                <span className="conn-dot bad" />
+              )}
+              <span className="lbl">{online ? "ao vivo" : "sem backend"}</span>
+            </span>
+            {version && <span className="ver">v{version}</span>}
           </div>
         </header>
 

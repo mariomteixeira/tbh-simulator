@@ -134,6 +134,14 @@ class GameData:
             self.rune_layout = {int(k): v for k, v in
                                 (data.get("positions") or {}).items()}
 
+        # elemento de ataque por monstro (raspado das páginas da wiki — não está
+        # nas tabelas; chave -> Physical/Fire/Cold/Lightning/Chaos)
+        try:
+            self.monster_elements = {int(k): v for k, v in
+                                     _load(gd_dir, "monster_elements").items()}
+        except FileNotFoundError:
+            self.monster_elements = {}
+
         self.offline_rewards = _load(gd_dir, "offline_rewards")
         self.pets = {p["PetKey"]: p for p in _load(gd_dir, "pets")}
         self.pet_stats = {}
@@ -193,7 +201,7 @@ class GameData:
         n_normal = n_stage_boss = n_act_boss = 0.0
         in_dps = 0.0          # dps medio de UM monstro (ponderado por presenca)
         biggest_hit = 0.0
-        elems = set()
+        elem_hits = {}            # elemento -> maior golpe daquele elemento
         weight = 0.0
         for mon, e in self.stage_monsters.get(key, []):
             n = e.get("perClear") or 0
@@ -219,7 +227,9 @@ class GameData:
             in_dps += mdps * n
             weight += n
             biggest_hit = max(biggest_hit, hit)
-            elems.update(mon.get("attackElements") or [])
+            # elemento real do monstro (raspado) -> maior hit por elemento
+            el = self.monster_elements.get(mon.get("MonsterKey"), "Physical")
+            elem_hits[el] = max(elem_hits.get(el, 0.0), hit)
 
         econ = {
             "key": key,
@@ -234,7 +244,9 @@ class GameData:
             "nNormal": n_normal, "nStageBoss": n_stage_boss, "nActBoss": n_act_boss,
             "monsterDps": (in_dps / weight) if weight else 0.0,
             "biggestHit": biggest_hit,
-            "elements": sorted(elems),
+            "elemHits": {k: round(v, 1) for k, v in elem_hits.items()},
+            # 'elements' = tipos NÃO-físicos (compat com EHP elemental existente)
+            "elements": sorted(k for k in elem_hits if k != "Physical"),
         }
         self._econ_cache[key] = econ
         return econ
@@ -537,6 +549,28 @@ def collect_hero(gd: GameData, save: dict, hero_save: dict, runes: dict,
         if p:
             bag.put(p["STATTYPE"], p["MODTYPE"], (p["Value"] or 0) * lv)
 
+    # blessings: skills CONTINUOUS (ativas enquanto equipadas) dão stat passivo
+    # — Blessing of Might (+AttackDamage), Blessing of Warding (+resist elemental)
+    for sk in hero_save.get("equippedSKillKey") or []:
+        row = gd.skills.get(sk)
+        if not row or row.get("ACTIVATIONTYPE") != "CONTINUOUS":
+            continue
+        lvl_rows = gd.skill_levels.get(row.get("SkillLevelKey")) or {}
+        if not lvl_rows:
+            continue
+        lvl = _skill_level(gd, save, hero_save["heroKey"], sk)
+        val = lvl_rows.get(lvl) or lvl_rows.get(max(lvl_rows)) or 0
+        bset = _skill_buffs(gd, row.get("BuffGroupKey"))
+        if bset:
+            for b in bset:
+                bag.put(b.get("STATTYPE"), b.get("MODTYPE"), val)
+        else:
+            # buff keys fora da tabela `buffs` (ex.: Warding): usa a descrição
+            desc = ((row.get("SkillDescriptionKey_i18n") or {}).get("en-US") or "").lower()
+            if "elemental resistance" in desc:
+                for el in ("Fire", "Cold", "Lightning"):
+                    bag.put(f"{el}Resistance", "FLAT", val)
+
     # runas que dao stat para todos os herois
     for st, val in runes.items():
         mapped = _rune_to_hero_stat(st)
@@ -569,14 +603,18 @@ def _dmg_bonus(stats, delivery, element):
 
 
 def _skill_level(gd: GameData, save: dict, hero_key: int, skill_key: int):
-    lvl = 1
+    """Nível REAL da skill = o Level do nó ACTIVESKILL na árvore (já é o nível
+    mostrado no jogo). NÃO somar uma base 1 — isso dava +1 (ex.: Cura nó Level=5
+    aparecia como 6, e ainda pegava o Value do nível 6 na tabela). Sem nó (ataque
+    básico) = nível 1."""
+    lvl = 0
     for a in save.get("attributeSaveDatas") or []:
         node = gd.attributes.get(a.get("Key"))
         if (node and node["HeroKey"] == hero_key
                 and node["ATTRIBUTETYPE"] == "ACTIVESKILL"
                 and node["Value"] == skill_key):
             lvl += a.get("Level") or 0
-    return lvl
+    return max(lvl, 1)
 
 
 # rótulos pt-BR de stats afetados por buffs de skill
@@ -731,10 +769,18 @@ def hero_damage(gd: GameData, save: dict, hero_save: dict, stats: dict):
 
         # --- skill de UTILIDADE (cura/revive/escudo): NÃO é dano ---
         if not _is_damage_skill(row):
+            desc = ((row.get("SkillDescriptionKey_i18n") or {}).get("en-US") or "").lower()
+            # cura % do HP máx do alvo: o Value da tabela É o {0}% da descrição
+            heal_pct = (round(val) if ("restore" in desc and "hp" in desc and "%" in desc)
+                        else None)
+            # recarga efetiva (recarga/cast da healer = cura mais vezes)
+            cd_eff = (cd * (1 - cdr) / cast) if (act == "COOLDOWN" and cast > 0) else cd
             utility_detail.append({
                 "key": sk,
                 "name": _name(row.get("SkillNameKey_i18n")) or f"Skill {sk}",
-                "level": lvl, "kind": _util_kind(row), "cooldown": cd,
+                "level": lvl, "kind": _util_kind(row),
+                "cooldown": round(cd_eff, 2), "cooldownBase": cd,
+                "healPct": heal_pct,
             })
             continue
 
@@ -791,26 +837,107 @@ def mitigation(armor: float, stage_level: int, damage: float):
 # "Elemental" = fogo/gelo/raio. CHAOS é separado e NÃO é coberto por
 # AllElementalResistance (só por ChaosResistance). Armadura só corta físico.
 _ELEMENTAL = ("Fire", "Cold", "Lightning")
+_RES_CAP = 75.0  # teto padrão de resistência (%); MaxXResistance aumenta
+# Penalidade de resistência ELEMENTAL por dificuldade (subtrai da resistência
+# antes do cap de 75%). Confirmado pelo usuário: NM −20, Hell −40.
+# TORMENT −60 é PROVISÓRIO (padrão +20/tier; ainda não confirmado in-game).
+_DIFF_RES_PENALTY = {"NORMAL": 0.0, "NIGHTMARE": 20.0, "HELL": 40.0, "TORMENT": 60.0}
+_DIFF_TORMENT_CONFIRMED = False  # quando souber o real, atualizar e marcar True
+_DIFF_PENALTY_HITS_CHAOS = False  # penalidade é elemental; chaos não é afetado
+# Alvo de sobrevivência: aguentar este nº de golpes do pior elemento = "passa"
+# (mesmo limiar do veredito em combat_focus: <3 arriscado, <5 apertado, >=5 ok).
+COMBAT_TARGET_HITS = 5
 
 
-def hero_ehp(stats: dict, stage_level: int, hit: float, elements):
-    """EHP contra um estagio: HP / fracao de dano que passa."""
+def _taken_fraction(stats: dict, stage_level: int, hit: float, el: str,
+                    penalty: float) -> float:
+    """Fração do golpe `hit` (do elemento `el`) que passa: físico pela armadura,
+    elemental/chaos pela resistência linear (com penalidade e teto)."""
+    if el == "Physical":
+        return 1 - mitigation(stats.get("Armor") or 0, stage_level, hit)
+    res = stats.get(f"{el}Resistance") or 0
+    if el in _ELEMENTAL:        # chaos NÃO recebe AllElementalResistance
+        res += stats.get("AllElementalResistance") or 0
+    if el in _ELEMENTAL or _DIFF_PENALTY_HITS_CHAOS:
+        res -= penalty          # penalidade de dificuldade (não atinge chaos)
+    cap = _RES_CAP + (stats.get(f"Max{el}Resistance") or 0)
+    res = min(res, cap)         # teto: 75% padrão, MaxXResistance sobe o cap
+    return max(1 - res / 100.0, 0.0) if res >= 0 else 1 + abs(res) / 100.0
+
+
+def hero_ehp(stats: dict, stage_level: int, hit: float, elements, difficulty=None):
+    """EHP contra um estagio: HP / fracao de dano que passa.
+
+    `elements` aceita:
+      - list[str]: usa o `hit` escalar pra todos, com PESO IGUAL (legado).
+      - dict{elemento: golpe}: golpe próprio de cada elemento, MÉDIA PONDERADA
+        pelo tamanho do golpe — o físico costuma ser o MAIOR e não pode ser
+        ignorado (senão a armadura some do cálculo). Esse é o caminho usado
+        pra ranquear gear e pra mostrar o EHP do herói.
+
+    difficulty (NORMAL/NIGHTMARE/HELL/TORMENT): aplica penalidade de resistência
+    da fase (mapas mais difíceis reduzem sua resistência elemental)."""
     hp = stats.get("MaxHp") or 0
-    # fisico passa pela armadura; elemental/chaos por resistencia linear
-    phys_taken = 1 - mitigation(stats.get("Armor") or 0, stage_level, hit)
-    takens = []
-    for el in elements or ["Physical"]:
-        if el == "Physical":
-            takens.append(phys_taken)
-        else:
-            res = stats.get(f"{el}Resistance") or 0
-            if el in _ELEMENTAL:   # chaos NÃO recebe AllElementalResistance
-                res += stats.get("AllElementalResistance") or 0
-            takens.append(max(1 - res / 100.0, 0.0) if res >= 0 else 1 + abs(res) / 100.0)
-    avg_taken = sum(takens) / len(takens)
+    penalty = _DIFF_RES_PENALTY.get(difficulty, 0.0)
+    if isinstance(elements, dict):
+        # dict {elemento: golpe}: média do "taken" PONDERADA pelo golpe — o
+        # físico costuma ser o MAIOR; ignorá-lo apagaria a armadura do cálculo.
+        pairs = [(el, h) for el, h in elements.items() if h and h > 0]
+        if not pairs:
+            pairs = [("Physical", hit)]
+        num = sum(h * _taken_fraction(stats, stage_level, h, el, penalty)
+                  for el, h in pairs)
+        den = sum(h for _, h in pairs)
+        avg_taken = num / den if den else 1.0
+    else:
+        # lista[str] (legado): mesmo golpe escalar pra todos, PESO IGUAL
+        els = elements or ["Physical"]
+        avg_taken = sum(_taken_fraction(stats, stage_level, hit, el, penalty)
+                        for el in els) / len(els)
     dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
     avg_taken *= (1 - dr)
     return hp / max(avg_taken, 0.01)
+
+
+def resist_needed(stats: dict, stage_level: int, hit: float, el: str,
+                  target_hits: float, difficulty=None):
+    """Quantos PONTOS de resistência de `el` faltam pro herói aguentar
+    `target_hits` golpes desse elemento nesta fase. Mesma conta do hero_ehp,
+    invertida: taken = (1 - res/100)·(1 - dr), golpes = HP / (taken·golpe).
+
+    Devolve None se já aguenta, se for físico (não tem como subir resist) ou
+    se não há dado. Senão {points, capped, resNow, resTarget}:
+      - capped=True: nem chegando no teto (75% + MaxXResistance) aguenta só com
+        resist — precisa de HP/DamageReduction/MaxXResistance também."""
+    if el == "Physical" or hit <= 0 or target_hits <= 0:
+        return None
+    hp = stats.get("MaxHp") or 0
+    if hp <= 0:
+        return None
+    dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
+    if dr >= 1:
+        return None
+    penalty = _DIFF_RES_PENALTY.get(difficulty, 0.0)
+    res = stats.get(f"{el}Resistance") or 0
+    if el in _ELEMENTAL:
+        res += stats.get("AllElementalResistance") or 0
+    if el in _ELEMENTAL or _DIFF_PENALTY_HITS_CHAOS:
+        res -= penalty
+    cap = _RES_CAP + (stats.get(f"Max{el}Resistance") or 0)
+    res_eff = min(res, cap)
+    taken_cur = (max(1 - res_eff / 100.0, 0.0) if res_eff >= 0
+                 else 1 + abs(res_eff) / 100.0) * (1 - dr)
+    hits_cur = hp / max(taken_cur, 1e-9) / hit
+    if hits_cur >= target_hits:
+        return None
+    # fração de dano alvo p/ aguentar target_hits, e a resist efetiva que a dá
+    taken_tgt = hp / (target_hits * hit)
+    res_tgt = 100.0 * (1 - taken_tgt / (1 - dr))
+    if res_tgt > cap:                 # nem no teto aguenta só com resist
+        return {"points": max(0, round(cap - res_eff)), "capped": True,
+                "resNow": round(res_eff), "resTarget": round(cap)}
+    return {"points": max(0, round(res_tgt - res_eff)), "capped": False,
+            "resNow": round(res_eff), "resTarget": round(res_tgt)}
 
 
 # ---------------------------------------------------------------------------
@@ -1024,19 +1151,34 @@ def _slot_gear_type(hero_row: dict, slot: int):
 # Papel de cada heroi -> peso de DPS no "power" do comparador de gear.
 # Tank prioriza EHP (sobreviver); DPS prioriza dano. Knight/Priest = tank;
 # Ranger/Sorcerer = dps. Hunter/Slayer = dps por padrao (ajustavel).
-HERO_ROLE = {101: "tank", 401: "tank",       # Knight, Priest
+HERO_ROLE = {101: "tank", 401: "healer",     # Knight=tank, Priest=healer
              201: "dps", 301: "dps",         # Ranger, Sorcerer
              501: "dps", 601: "dps"}          # Hunter, Slayer
-ROLE_WDPS = {"tank": 0.35, "dps": 0.65}       # peso de DPS; peso de EHP = 1 - w
+# peso do eixo OFENSIVO no power (resto = EHP). DPS prioriza dano; tank prioriza
+# EHP (agressivo); healer pesa cura (eixo ofensivo = ritmo de cura, não dano).
+ROLE_WDPS = {"tank": 0.25, "dps": 0.75, "healer": 0.5}
 
 
-def _power(dps: float, ehp: float, w_dps: float = 0.5):
-    """Media geometrica PONDERADA de DPS e EHP. w_dps=0.5 = sqrt(dps*ehp)
-    (peso igual); tank usa w_dps baixo (mais EHP), DPS usa w_dps alto."""
-    d, e = max(dps, 0.0), max(ehp, 0.0)
+def _heal_rate(stats: dict) -> float:
+    """Ritmo de cura relativo da Priest: sobe com Cast Speed e Recarga (CDR) —
+    são eles que fazem ela curar mais vezes. (A cura em si é % do HP do alvo.)"""
+    cast = max((stats.get("CastSpeed") or 100) / 100.0, 0.1)
+    cdr = min((stats.get("CooldownReduction") or 0) / PCT, 0.75)
+    return cast / (1 - cdr)
+
+
+def _offense_axis(role: str, dmg: dict, stats: dict) -> float:
+    """Eixo 'ofensivo' do power por papel: healer = ritmo de cura; resto = DPS."""
+    return _heal_rate(stats) if role == "healer" else (dmg.get("dps") or 0.0)
+
+
+def _power(off: float, ehp: float, w_off: float = 0.5):
+    """Media geometrica PONDERADA do eixo ofensivo (DPS ou cura) e EHP.
+    w=0.5 = sqrt; tank usa w baixo (mais EHP), DPS usa w alto."""
+    d, e = max(off, 0.0), max(ehp, 0.0)
     if d <= 0 or e <= 0:
         return 0.0
-    return d ** w_dps * e ** (1 - w_dps)
+    return d ** w_off * e ** (1 - w_off)
 
 
 def _item_brief(gd: GameData, item_key):
@@ -1056,64 +1198,99 @@ def _stat_diff(base: dict, new: dict, top: int = 4):
     return out[:top]
 
 
-def gear_advisor(gd: GameData, save: dict, fielded_saves: list, runes: dict,
-                 ref_level: int, ref_hit: float, elements):
-    """Para cada slot de cada heroi do time, procura no inventario um item
-    melhor que o equipado (criterio: power = sqrt(DPS x EHP))."""
+# elementos do "cenário neutro" do advisor GERAL: perfil equilibrado (físico +
+# os 3 elementais + chaos com o MESMO golpe) — assim armadura/HP/cada resist
+# contam parelho e o upgrade vale "no geral", independente da fase atual.
+_NEUTRAL_ELEMS = ("Physical", "Fire", "Cold", "Lightning", "Chaos")
+
+
+def _hero_gear_eval(gd: GameData, save: dict, hs: dict, runes: dict):
+    """Precomputa, por slot do herói, o item atual e os candidatos do inventário
+    (com stats e dano JÁ calculados). NÃO depende da fase — o EHP/power é
+    calculado depois, por cenário (geral ou por fase). Items equipados em OUTRO
+    herói do time ficam de fora (não dá pra usar em dois lugares)."""
     item_by_uid = {it["UniqueId"]: it for it in save.get("itemSaveDatas") or []}
-    equipped_all = {uid for hs in fielded_saves
-                    for uid in (hs.get("equippedItemIds") or []) if uid}
-    out = []
-    for hs in fielded_saves:
-        hero_row = gd.heroes.get(hs["heroKey"]) or {}
-        cur_uids = list(hs.get("equippedItemIds") or [])
-        cur_uids += [0] * (10 - len(cur_uids))
-
-        role = HERO_ROLE.get(hs["heroKey"], "dps")
-        w_dps = ROLE_WDPS.get(role, 0.5)
-        base_stats = collect_hero(gd, save, hs, runes)
-        base_dmg = hero_damage(gd, save, hs, base_stats)
-        base_ehp = hero_ehp(base_stats, ref_level, ref_hit, elements)
-        base_power = _power(base_dmg["dps"], base_ehp, w_dps)
-
-        slots = []
-        for slot in range(10):
-            gt = _slot_gear_type(hero_row, slot)
-            if not gt:
+    equipped_all = {uid for h in save.get("heroSaveDatas") or []
+                    for uid in (h.get("equippedItemIds") or [])
+                    if uid and h is not hs}
+    hero_row = gd.heroes.get(hs["heroKey"]) or {}
+    cur_uids = list(hs.get("equippedItemIds") or [])
+    cur_uids += [0] * (10 - len(cur_uids))
+    base_stats = collect_hero(gd, save, hs, runes)
+    base_dmg = hero_damage(gd, save, hs, base_stats)
+    slots = []
+    for slot in range(10):
+        gt = _slot_gear_type(hero_row, slot)
+        if not gt:
+            continue
+        cur_uid = cur_uids[slot]
+        cands = []
+        for it in save.get("itemSaveDatas") or []:
+            uid = it["UniqueId"]
+            if uid == cur_uid or uid in equipped_all:
                 continue
-            cur_uid = cur_uids[slot]
-            best = None
-            for it in save.get("itemSaveDatas") or []:
-                uid = it["UniqueId"]
-                if uid == cur_uid:
-                    continue
-                if uid in equipped_all:
-                    continue  # equipado em outro heroi do time
-                if (gd.items.get(it["ItemKey"]) or {}).get("gear") != gt:
-                    continue
-                trial = cur_uids.copy()
-                trial[slot] = uid
-                st2 = collect_hero(gd, save, hs, runes, equip_override=trial)
-                d2 = hero_damage(gd, save, hs, st2)
-                e2 = hero_ehp(st2, ref_level, ref_hit, elements)
-                d_power = _power(d2["dps"], e2, w_dps) - base_power
-                if d_power > 1e-6 and (best is None or d_power > best["dPower"]):
-                    best = {**_item_brief(gd, it["ItemKey"]),
-                            "dPower": round(d_power, 1),
-                            "dDps": round(d2["dps"] - base_dmg["dps"], 1),
-                            "dEhp": round(e2 - base_ehp, 1),
-                            "statDiff": _stat_diff(base_stats, st2)}
-            cur_it = item_by_uid.get(cur_uid)
-            if best or not cur_uid:
-                slots.append({
-                    "slot": slot, "gearType": gt, "empty": not cur_uid,
-                    "current": _item_brief(gd, cur_it["ItemKey"]) if cur_it else None,
-                    "upgrade": best,
-                })
-        out.append({"heroKey": hs["heroKey"], "cls": hero_row.get("ClassType"),
-                    "role": role, "wDps": w_dps,
-                    "basePower": round(base_power, 1), "slots": slots})
-    return out
+            if (gd.items.get(it["ItemKey"]) or {}).get("gear") != gt:
+                continue
+            trial = cur_uids.copy()
+            trial[slot] = uid
+            st2 = collect_hero(gd, save, hs, runes, equip_override=trial)
+            cands.append((it, st2, hero_damage(gd, save, hs, st2)))
+        cur_it = item_by_uid.get(cur_uid)
+        slots.append({"slot": slot, "gearType": gt, "curUid": cur_uid,
+                      "current": _item_brief(gd, cur_it["ItemKey"]) if cur_it else None,
+                      "empty": not cur_uid, "cands": cands})
+    return {"heroKey": hs["heroKey"], "cls": hero_row.get("ClassType"),
+            "role": HERO_ROLE.get(hs["heroKey"], "dps"),
+            "baseStats": base_stats, "baseDmg": base_dmg, "slots": slots}
+
+
+def _rank_scenario(gd: GameData, ev: dict, scn: dict):
+    """Pra um cenário (level/hit/elements/difficulty), devolve a melhor troca de
+    cada slot do herói (maior ganho de power)."""
+    role = ev["role"]
+    w = ROLE_WDPS.get(role, 0.5)
+    base_dmg, base_stats = ev["baseDmg"], ev["baseStats"]
+    base_ehp = hero_ehp(base_stats, scn["level"], scn["hit"], scn["elements"],
+                        difficulty=scn.get("diff"))
+    base_power = _power(_offense_axis(role, base_dmg, base_stats), base_ehp, w)
+    out = []
+    for s in ev["slots"]:
+        best = None
+        for it, st2, d2 in s["cands"]:
+            e2 = hero_ehp(st2, scn["level"], scn["hit"], scn["elements"],
+                          difficulty=scn.get("diff"))
+            d_power = _power(_offense_axis(role, d2, st2), e2, w) - base_power
+            if d_power > 1e-6 and (best is None or d_power > best["dPower"]):
+                best = {**_item_brief(gd, it["ItemKey"]),
+                        "dPower": round(d_power, 1),
+                        "dDps": round(d2["dps"] - base_dmg["dps"], 1),
+                        "dEhp": round(e2 - base_ehp, 1),
+                        "statDiff": _stat_diff(base_stats, st2)}
+        if best:
+            out.append({"slot": s["slot"], "gearType": s["gearType"],
+                        "current": s["current"], "upgrade": best})
+    return {"heroKey": ev["heroKey"], "cls": ev["cls"], "role": role, "wDps": w,
+            "basePower": round(base_power, 1), "slots": out}
+
+
+def gear_advice(gd: GameData, save: dict, fielded_saves: list, runes: dict,
+                neutral: dict, stage_scns: list):
+    """Dois eixos de recomendação de gear, DESACOPLADOS da fase atual:
+      - general: upgrades "diretos" — o item é melhor no geral (cenário neutro);
+      - byStage: build pra cada fase selecionável (perfil de dano daquela fase,
+        onde aparece o que troca pra AGUENTAR — resist/EHP, mesmo perdendo DPS).
+    A parte cara (collect_hero por candidato) roda UMA vez por herói e é
+    reaproveitada em todos os cenários."""
+    evals = [_hero_gear_eval(gd, save, hs, runes) for hs in fielded_saves]
+    general = [_rank_scenario(gd, ev, neutral) for ev in evals]
+    by_stage = []
+    for scn in stage_scns:
+        heroes = [_rank_scenario(gd, ev, scn) for ev in evals]
+        by_stage.append({"key": scn["id"], "label": scn.get("label"),
+                         "name": scn.get("name"), "tag": scn.get("tag"),
+                         "lvl": scn["level"], "diff": scn.get("diff"),
+                         "current": bool(scn.get("current")), "heroes": heroes})
+    return {"general": general, "byStage": by_stage}
 
 
 # ---------------------------------------------------------------------------
@@ -1396,6 +1573,90 @@ def project_levels(gd: GameData, level: int, exp_now: float, eps: float,
 # ---------------------------------------------------------------------------
 # Simulacao completa a partir do save
 # ---------------------------------------------------------------------------
+def combat_focus(gd: GameData, save: dict, fielded_saves: list, runes: dict,
+                 rows: list, party_dps: float, max_n: int = 4):
+    """Foco automático: fase ATUAL + as próximas NÃO-passadas (dentro do teto).
+    Para cada uma: DPS do time, tempo de clear, EHP do herói mais frágil vs a
+    fase (já com penalidade de dificuldade), monsterDPS, tempo-até-morrer,
+    verdict ('dá pra passar?') e gargalo (defesa)."""
+    cur = next((r for r in rows if r.get("current")), None)
+    picked = [cur] if cur else []
+    for r in rows:
+        if r is cur:
+            continue
+        if r.get("cleared") or r.get("beyondCeiling") or r.get("type") == "ACTBOSS":
+            continue
+        picked.append(r)
+        if len(picked) >= max_n:
+            break
+    if not picked or not fielded_saves:
+        return []
+    hstats = [(hs, collect_hero(gd, save, hs, runes)) for hs in fielded_saves]
+    out = []
+    for r in picked:
+        econ = gd.stage_econ(r["key"])
+        if not econ:
+            continue
+        diff = (gd.stages.get(r["key"]) or {}).get("STAGEDIFFICULITY")
+        lvl = econ["lvl"]
+        elem_hits = econ.get("elemHits") or {"Physical": econ.get("biggestHit") or 0}
+        mdps = econ.get("monsterDps") or 0.0
+        # sobrevivência é gateada pela LINHA DE FRENTE (tank/healer) — quem toma
+        # os hits. DPS de retaguarda (Sorcerer/Ranger) é frágil de propósito e
+        # não decide se a fase passa. (sem tank/healer no time -> usa todos)
+        front = [(hs, st) for hs, st in hstats
+                 if HERO_ROLE.get(hs["heroKey"]) in ("tank", "healer")] or hstats
+        # PIOR caso: o elemento que mata mais rápido o front (NÃO a média) — é o
+        # chaos/fire que decide, não o físico mitigado pela armadura
+        worst = None  # (golpes, st, heroKey, elemento, ehp, golpe)
+        for hs, st in front:
+            for el, ehit in elem_hits.items():
+                if ehit <= 0:
+                    continue
+                ehp_el = hero_ehp(st, lvl, ehit, [el], difficulty=diff)
+                h = ehp_el / ehit
+                if worst is None or h < worst[0]:
+                    worst = (h, st, hs["heroKey"], el, ehp_el, ehit)
+        hits = round(worst[0], 1) if worst else None
+        weakest_k = worst[2] if worst else None
+        threat = worst[3] if worst else None
+        ehp_min = round(worst[4]) if worst else 0
+        ct = r.get("clearTime") or 0.0
+        rating = r.get("rating")
+        # severidade = pior entre dois eixos INDEPENDENTES:
+        #  - sobrevivência: golpes que o front aguenta (<3 arriscado, <5 apertado)
+        #  - clear lento (rating CALIBRADO): demora a matar = falta dano/tempo
+        surv_sev = (2 if hits < 3 else 1 if hits < 5 else 0) if hits is not None else 0
+        rate_sev = {"seguro": 0, "apertado": 1, "arriscado": 2}.get(rating, 0)
+        sev = max(surv_sev, rate_sev)
+        verdict = ["passa", "apertado", "arriscado"][sev]
+        # gargalo atribuído ao eixo que mandou: morre cedo -> defesa; só clear
+        # lento (sobrevive, mas rating ruim) -> dano. Não rotular "defesa" quando
+        # o herói aguenta de boa e o problema é velocidade de kill.
+        bottleneck = None if sev == 0 else ("defesa" if surv_sev >= 1 else "dano")
+        # quanto de resist falta no herói mais frágil pra deixar de morrer (alvo
+        # = TARGET_HITS golpes, o mesmo limiar do veredito "passa"). Só faz
+        # sentido quando o gargalo É defesa (clear lento não se resolve com resist).
+        need_resist = None
+        if worst and threat and bottleneck == "defesa":
+            rn = resist_needed(worst[1], lvl, worst[5], threat,
+                               COMBAT_TARGET_HITS, difficulty=diff)
+            if rn and rn["points"] > 0:
+                need_resist = {"element": threat, "hits": COMBAT_TARGET_HITS, **rn}
+        out.append({
+            "key": r["key"], "label": r["label"], "tag": r["tag"], "name": r["name"],
+            "lvl": lvl, "diff": diff, "current": bool(r.get("current")),
+            "elements": sorted(elem_hits.keys()),
+            "partyDps": round(party_dps), "clearTime": round(ct, 1),
+            "ehpMin": ehp_min, "hitsToDie": hits, "threat": threat,
+            "weakestHero": (_name((gd.heroes.get(weakest_k) or {}).get("HeroNameKey_i18n"))
+                            or str(weakest_k)),
+            "verdict": verdict, "bottleneck": bottleneck, "rating": rating,
+            "needResist": need_resist,
+        })
+    return out
+
+
 def simulate(gd: GameData, save: dict, measured: dict | None = None,
              samples: list | None = None, stage_stats: dict | None = None,
              ceiling: int | None = None):
@@ -1447,10 +1708,14 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
                 + runes.get(f"Additional{kind}ActBoss", 0) * econ["nActBoss"])
 
     cur_key = cs.get("currentStageKey")
+    cur_diff = (gd.stages.get(cur_key) or {}).get("STAGEDIFFICULITY")  # NM/HELL/...
     cur_econ = gd.stage_econ(cur_key)
     cur_eff = eff_econ(cur_econ) if cur_econ else None
     ref_level = cur_econ["lvl"] if cur_econ else 1
     ref_hit = cur_econ["biggestHit"] if cur_econ else 0
+    # perfil de dano da fase POR ELEMENTO (inclui Físico, o maior golpe) — é o
+    # que entra no EHP e no ranqueamento de gear; sem o físico, a armadura some.
+    ref_elems = (cur_econ.get("elemHits") if cur_econ else None) or None
 
     # --- herois do time
     fielded = [k for k in cs.get("arrangedHeroKey") or [] if k and k > 0]
@@ -1462,8 +1727,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             continue
         stats = collect_hero(gd, save, hs, runes)
         dmg = hero_damage(gd, save, hs, stats)
-        ehp = hero_ehp(stats, ref_level, ref_hit,
-                       cur_econ["elements"] if cur_econ else None)
+        ehp = hero_ehp(stats, ref_level, ref_hit, ref_elems, difficulty=cur_diff)
         hero_row = gd.heroes.get(hk) or {}
         heroes.append({
             "key": hk,
@@ -1671,11 +1935,42 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
             projection.append({"key": h["key"], "name": h["name"],
                                "cls": h["cls"], **proj})
 
-    # --- offline e gear
+    # --- offline, combate e gear
     offline = offline_info(gd, runes, ref_level, rows)
     fielded_saves = [hero_saves[hk] for hk in fielded if hk in hero_saves]
-    gear = gear_advisor(gd, save, fielded_saves, runes, ref_level, ref_hit,
-                        cur_econ["elements"] if cur_econ else None)
+    combat = combat_focus(gd, save, fielded_saves, runes, rows, party_dps)
+    # gear DESACOPLADO da fase: (a) cenário neutro = upgrades "diretos"; (b) um
+    # cenário por fase do combate (atual + próximas não-passadas) = build pra
+    # aguentar AQUELA fase. golpe de referência p/ o neutro: o da fase atual.
+    neutral_hit = ref_hit or 1.0
+    neutral_scn = {"id": "neutral", "level": ref_level or party_level,
+                   "hit": neutral_hit, "diff": None,
+                   "elements": {el: neutral_hit for el in _NEUTRAL_ELEMS}}
+    # fases selecionáveis no "build pra fase": janela em torno da fase ATUAL —
+    # 3 pra trás + a atual + 5 pra frente (planejar o próximo push). gear_advice
+    # precomputa os candidatos UMA vez e só re-pontua o EHP por cenário.
+    sel_keys, seen_k = [], set()
+    for r in rows:
+        if r.get("type") == "ACTBOSS":
+            continue
+        if r["key"] not in seen_k:
+            seen_k.add(r["key"]); sel_keys.append(r["key"])
+    sel_keys.sort()
+    if cur_key in sel_keys:
+        ci = sel_keys.index(cur_key)
+        sel_keys = sel_keys[max(0, ci - 3):ci + 6]   # 3 atrás + atual + 5 à frente
+    else:
+        sel_keys = sel_keys[:9]
+    stage_scns = []
+    for k in sel_keys:
+        e = gd.stage_econ(k)
+        if not e:
+            continue
+        stage_scns.append({
+            "id": k, "label": e["label"], "name": e["name"], "tag": e["tag"],
+            "level": e["lvl"], "hit": e["biggestHit"] or neutral_hit,
+            "elements": e["elemHits"], "diff": e["diff"], "current": k == cur_key})
+    gear = gear_advice(gd, save, fielded_saves, runes, neutral_scn, stage_scns)
 
     # --- arvore de runas + recomendacao de compra
     gold_now = next((c.get("Quantity") for c in save.get("currenySaveDatas") or []
@@ -1683,7 +1978,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
     runes_tree = rune_advisor(
         gd, save, runes,
         fielded_saves=fielded_saves, ref_level=ref_level, ref_hit=ref_hit,
-        elements=cur_econ["elements"] if cur_econ else None,
+        elements=ref_elems,
         cur_eff=cur_eff,
         ct=cur_row["clearTime"] if cur_row else None,
         gold_ph=cur_row["goldPerHour"] if cur_row else None,
@@ -1707,6 +2002,7 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         "projection": projection,
         "offline": offline,
         "gear": gear,
+        "combat": combat,
         "runes": runes_tree,
         "econScale": {"global": round(global_scale, 3),
                       "stages": {str(k): round(v, 3) for k, v in scales.items()}},
@@ -1821,9 +2117,9 @@ def coach_text(sim: dict, state_heroes=None):
                   f"({_fmt(park['gold'] - cur_off['gold'])} a menos).")
         out.append(p)
 
-    # 5. quick wins de gear
-    swaps = [(g["cls"], s) for g in sim.get("gear") or []
-             for s in g["slots"] if s.get("upgrade")]
+    # 5. quick wins de gear — upgrades "diretos" (cenário neutro, indep. da fase)
+    swaps = [(h["cls"], s) for h in (sim.get("gear") or {}).get("general") or []
+             for s in h["slots"] if s.get("upgrade")]
     if swaps:
         swaps.sort(key=lambda x: -x[1]["upgrade"]["dPower"])
         cls, s = swaps[0]
@@ -1832,12 +2128,6 @@ def coach_text(sim: dict, state_heroes=None):
         out.append(f"Gear: equipar “{up['name']}” ({up['grade']}, lvl {up['level']}) "
                    f"no {cls} dá +{_fmt(up['dPower'])} de power{extra}. "
                    f"Está parado no inventário.")
-    empties = [(g["cls"], s) for g in sim.get("gear") or []
-               for s in g["slots"] if s["empty"] and not s.get("upgrade")]
-    if empties:
-        out.append(f"Você tem {len(empties)} slot(s) de equipamento VAZIOS no time "
-                   f"({', '.join(sorted({s['gearType'] for _, s in empties}))}) — "
-                   f"qualquer item é melhor que nada.")
 
     # 6. estado do modelo
     cal = sim.get("calibration") or {}

@@ -6,9 +6,13 @@
 # Clone de terceiros, mantido so pra comparacao local (nao vendorizar — ver README).
 /reference/
 
-# Cache de icones de itens (baixados sob demanda do wiki pelo /itemicon;
-# variam por save e sao re-baixaveis — nao versionar).
+# Cache de icones de itens/herois (baixados sob demanda do wiki pelo
+# /itemicon e /heroicon; re-baixaveis — nao versionar).
 /gamedata/icons/items/
+/gamedata/icons/heroes/
+
+# Artefatos da skill impeccable (critique snapshots, hook cache) — nao versionar.
+.impeccable/
 
 # Dependencias do frontend (regeneraveis: npm install).
 # O build (frontend/dist) E VERSIONADO de proposito: o pacote portatil e o

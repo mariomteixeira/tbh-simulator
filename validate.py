@@ -205,9 +205,17 @@ def t_real_save(gd):
           r["offline"]["park"] is None or any(
               row["key"] == r["offline"]["park"]["key"] and (row["cleared"] or row["current"])
               for row in r["farm"]["rows"]))
-    ups = [s for g in r["gear"] for s in g["slots"] if s["upgrade"]]
-    check("gear advisor: estrutura ok",
-          all(s["upgrade"]["dPower"] > 0 for s in ups))
+    # gear = dois eixos: general (cenário neutro) + byStage (build por fase)
+    g = r["gear"]
+    check("gear: tem general e byStage", "general" in g and "byStage" in g)
+    gen_ups = [s for h in g["general"] for s in h["slots"]]
+    check("gear general: só trocas com ganho de power",
+          all(s["upgrade"]["dPower"] > 0 for s in gen_ups))
+    check("gear byStage: cenários selecionáveis (inclui a fase atual)",
+          len(g["byStage"]) >= 1 and any(st.get("current") for st in g["byStage"]))
+    stg_ups = [s for st in g["byStage"] for h in st["heroes"] for s in h["slots"]]
+    check("gear byStage: trocas com ganho de power",
+          all(s["upgrade"]["dPower"] > 0 for s in stg_ups))
     return save
 
 
@@ -333,6 +341,22 @@ def t_chaos_resist():
     check("ChaosResistance reduz chaos (EHP sobe)", chaos_res > chaos0 + 1)
 
 
+def t_diff_penalty():
+    """Penalidade de resistência por dificuldade (NM -20, Hell -40), só elemental,
+    aplicada antes do cap de 75%."""
+    from simulator import hero_ehp
+    base = {"MaxHp": 1000.0, "Armor": 0.0}
+    s = {**base, "FireResistance": 80}
+    n = hero_ehp(s, 67, 5000, ["Fire"], difficulty="NORMAL")
+    h = hero_ehp(s, 67, 5000, ["Fire"], difficulty="HELL")
+    check("Hell reduz EHP elemental vs Normal", h < n - 1, f"n={n} h={h}")
+    over = hero_ehp({**base, "AllElementalResistance": 120}, 67, 5000, ["Fire"], difficulty="HELL")
+    check("overstack (120) segue capado no Hell", abs(over - n) < 1, f"over={over} n={n}")
+    c0 = hero_ehp(base, 67, 5000, ["Chaos"], difficulty="NORMAL")
+    cH = hero_ehp(base, 67, 5000, ["Chaos"], difficulty="HELL")
+    check("penalidade NÃO atinge chaos", abs(c0 - cH) < 1, f"{c0} vs {cH}")
+
+
 def t_role_power():
     """Peso por papel: tank valoriza +EHP, DPS valoriza +DPS. w=0.5 = sqrt."""
     from simulator import _power, ROLE_WDPS
@@ -348,11 +372,62 @@ def t_role_power():
           (_power(d, e * 1.2, ROLE_WDPS["dps"]) - bp))
 
 
+def t_ehp_weighted():
+    """Regressão do bug do gear advisor: o EHP da fase tem que considerar o
+    PERFIL de dano por elemento (dict {el: golpe}) incluindo o FÍSICO — senão a
+    armadura some do cálculo (advisor ignorava upgrade de armadura). Com só a
+    lista elemental ['Fire'], armadura não muda nada; com o dict incl. Físico,
+    mais armadura => mais EHP."""
+    from simulator import hero_ehp
+    low = {"MaxHp": 1000.0, "Armor": 200.0}
+    high = {"MaxHp": 1000.0, "Armor": 4000.0}
+    # lista só-fogo: armadura é irrelevante (fogo não passa pela armadura)
+    f_lo = hero_ehp(low, 50, 600, ["Fire"])
+    f_hi = hero_ehp(high, 50, 600, ["Fire"])
+    check("lista ['Fire']: armadura não muda EHP", abs(f_lo - f_hi) < 1e-6)
+    # dict com físico dominante: mais armadura TEM que subir o EHP
+    prof = {"Physical": 600.0, "Fire": 300.0}
+    d_lo = hero_ehp(low, 50, 600, prof)
+    d_hi = hero_ehp(high, 50, 600, prof)
+    check("dict {Physical,Fire}: +armadura sobe EHP", d_hi > d_lo + 1,
+          f"lo={d_lo:.0f} hi={d_hi:.0f}")
+    # ponderação pelo golpe: físico (maior) pesa mais que o fogo
+    eq = {"Physical": 600.0, "Fire": 600.0}
+    check("ponderado != peso-igual quando golpes diferem",
+          abs(hero_ehp(low, 50, 600, prof) - hero_ehp(low, 50, 600, eq)) > 1)
+
+
+def t_resist_needed():
+    """resist_needed inverte o hero_ehp: +pts de resist => aguenta target golpes.
+    Aplicar os pontos retornados deve dar >= target_hits no hero_ehp."""
+    from simulator import hero_ehp, resist_needed, COMBAT_TARGET_HITS as T
+    base = {"MaxHp": 10000.0, "Armor": 0.0}  # sem resist nenhuma
+    hit = 4000.0
+    # chaos: morre rápido (10000/4000 = 2.5 golpes < 5)
+    rn = resist_needed(base, 67, hit, "Chaos", T)
+    check("chaos sem resist precisa de pontos", rn and rn["points"] > 0, rn)
+    fixed = {**base, "ChaosResistance": rn["points"]}
+    got = hero_ehp(fixed, 67, hit, ["Chaos"]) / hit
+    check("aplicar os pontos atinge o alvo de golpes", got >= T - 0.2,
+          f"got={got:.2f} alvo={T} pts={rn['points']}")
+    # quem já aguenta não recebe recomendação
+    safe = {"MaxHp": 100000.0, "Armor": 0.0}
+    check("já aguenta => None", resist_needed(safe, 67, hit, "Chaos", T) is None)
+    # físico não tem resist => None
+    check("físico => None", resist_needed(base, 67, hit, "Physical", T) is None)
+    # cap: golpe gigante => nem no teto aguenta, capped=True
+    big = resist_needed({"MaxHp": 1000.0, "Armor": 0.0}, 67, 100000.0, "Fire", T)
+    check("golpe gigante => capped", big and big["capped"], big)
+
+
 if __name__ == "__main__":
     t_stacking()
     t_crit()
     t_chaos_resist()
+    t_diff_penalty()
     t_role_power()
+    t_ehp_weighted()
+    t_resist_needed()
     t_mitigation()
     t_rune_mapping()
     t_fit_recovery()

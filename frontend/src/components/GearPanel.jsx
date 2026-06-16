@@ -1,100 +1,193 @@
-import React from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { fmt } from "../format.js";
 import { fmtStatDelta } from "../statNames.js";
+import { gradeOf, gearPt } from "../grades.js";
 
-const GRADE_CLASS = {
-  COMMON: "g-common", UNCOMMON: "g-uncommon", RARE: "g-rare",
-  EPIC: "g-epic", LEGENDARY: "g-legendary", MYTHIC: "g-mythic",
-};
-
-function Item({ it }) {
-  if (!it) return <span className="muted">vazio</span>;
+// opção de fase: chip de dificuldade colorido + id em mono + nome
+function StageOpt({ o }) {
   return (
-    <span className={GRADE_CLASS[it.grade] || ""}>
-      {it.name} <span className="muted">lvl {it.level}</span>
+    <span className="stage-opt">
+      <span className={"diff " + o.tag}>{o.tag}</span>
+      <span className="so-id num">{o.label}</span>
+      <span className="dim so-name">{o.name}</span>
+      <span className="dim num so-lv">Lv{o.lvl}</span>
+      {o.current && <span className="badge cur">atual</span>}
     </span>
+  );
+}
+
+// dropdown pixel custom (o <select> nativo não renderiza cor/símbolo nas options)
+function StageSelect({ options, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const sel = options.find((o) => o.key === value) || options[0];
+  return (
+    <div className={"pix-select" + (open ? " open" : "")} ref={ref}>
+      <button type="button" className="pix-select-btn" onClick={() => setOpen((o) => !o)}>
+        {sel ? <StageOpt o={sel} /> : <span className="dim">—</span>}
+        <span className="pix-caret">▾</span>
+      </button>
+      {open && (
+        <div className="pix-select-list">
+          {options.map((o) => (
+            <button
+              type="button"
+              key={o.key}
+              className={"pix-opt" + (o.key === value ? " on" : "")}
+              onClick={() => {
+                onChange(o.key);
+                setOpen(false);
+              }}
+            >
+              <StageOpt o={o} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 export function RoleTag({ role }) {
   if (!role) return null;
-  const tank = role === "tank";
+  const cls = { tank: "r-tank", dps: "r-dps", healer: "r-heal" }[role] || "r-dps";
+  return <span className={"role-tag " + cls}>{role}</span>;
+}
+
+function Item({ it }) {
+  if (!it) return <span className="muted">vazio</span>;
+  const g = gradeOf(it.grade);
+  // Cosmic (special) = holo: gradiente no nome em vez de cor flat.
+  const nameStyle = g.special
+    ? {
+        background: "linear-gradient(90deg, #54b9ff, #c06bff, #ffd23f)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        color: "transparent",
+      }
+    : { color: g.c };
   return (
-    <span className={"role-tag " + (tank ? "r-tank" : "r-dps")}>
-      {tank ? "tank" : "dps"}
+    <span>
+      <span style={nameStyle}>{it.name}</span>{" "}
+      <span className="muted">lvl {it.level}</span>
     </span>
   );
 }
 
-export default function GearPanel({ gear }) {
-  const upgrades = [];
-  const empties = [];
-  for (const g of gear) {
-    for (const s of g.slots) {
-      if (s.upgrade) upgrades.push({ cls: g.cls, role: g.role, ...s });
-      else if (s.empty) empties.push({ cls: g.cls, role: g.role, ...s });
-    }
-  }
-  if (!upgrades.length && !empties.length) {
-    return (
-      <section className="sec">
-        <h2>Gear</h2>
-        <p className="muted">Nenhuma troca melhor no inventário. Tudo otimizado.</p>
-      </section>
-    );
-  }
-  upgrades.sort((a, b) => b.upgrade.dPower - a.upgrade.dPower);
+function SwapRow({ cls, role, slot }) {
+  const u = slot.upgrade;
   return (
-    <section className="sec">
-      <h2>Gear — trocas que valem</h2>
-      <div className="gear-list">
-        {upgrades.map((u, i) => (
-          <div className="gear-row" key={i}>
-            <div className="gear-slot">
-              {u.cls} <RoleTag role={u.role} /> · {u.gearType.toLowerCase()}
-            </div>
-            <div className="gear-swap">
-              <Item it={u.current} /> <span className="arrow">→</span>{" "}
-              <Item it={u.upgrade} />
-            </div>
-            {u.upgrade.statDiff?.length > 0 && (
-              <div className="gear-stats">
-                {u.upgrade.statDiff.map((d, j) => (
-                  <span key={j} className={"stat-chip" + (d.delta < 0 ? " neg" : "")}>
-                    {fmtStatDelta(d)}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="gear-effect">
-              {u.upgrade.dDps !== 0 && (
-                <span className={u.upgrade.dDps > 0 ? "badge-green" : "badge-red"}>
-                  {u.upgrade.dDps > 0 ? "+" : ""}{fmt(u.upgrade.dDps)} dps
-                </span>
-              )}
-              {u.upgrade.dEhp !== 0 && (
-                <span className={u.upgrade.dEhp > 0 ? "badge-green" : "badge-red"}>
-                  {u.upgrade.dEhp > 0 ? "+" : ""}{fmt(u.upgrade.dEhp)} ehp
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-        {empties.length > 0 && (
-          <div className="gear-empties">
-            <b>{empties.length} slot(s) vazio(s):</b>{" "}
-            <span className="muted">
-              {empties.map((e) => `${e.cls} ${e.gearType.toLowerCase()}`).join(", ")}
-            </span>
-          </div>
-        )}
-        <p className="muted small">
-          A troca recalcula o herói inteiro (flats × percentuais × crítico ×
-          recarga, com todos os affixes) contra a fase atual. O ranking é por
-          papel: <b>tank</b> (Knight, Priest) pesa mais EHP; <b>dps</b> (Ranger,
-          Sorcerer, Hunter, Slayer) pesa mais dano.
-        </p>
+    <div className="gear-row">
+      <div className="gear-slot">
+        {cls} <RoleTag role={role} /> · {gearPt(slot.gearType)}
       </div>
-    </section>
+      <div className="gear-swap">
+        <Item it={slot.current} /> <span className="arrow">→</span>{" "}
+        <Item it={u} />
+      </div>
+      {u.statDiff?.length > 0 && (
+        <div className="gear-stats">
+          {u.statDiff.map((d, j) => (
+            <span key={j} className={"stat-chip" + (d.delta < 0 ? " neg" : "")}>
+              {fmtStatDelta(d)}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="gear-effect">
+        {u.dDps !== 0 && (
+          <span className={u.dDps > 0 ? "badge-green" : "badge-red"}>
+            {u.dDps > 0 ? "+" : ""}{fmt(u.dDps)} dps
+          </span>
+        )}
+        {u.dEhp !== 0 && (
+          <span className={u.dEhp > 0 ? "badge-green" : "badge-red"}>
+            {u.dEhp > 0 ? "+" : ""}{fmt(u.dEhp)} ehp
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// achata os heróis -> uma lista de trocas, ordenada por ganho de power
+function flatten(heroes) {
+  const out = [];
+  for (const h of heroes || [])
+    for (const s of h.slots || [])
+      if (s.upgrade) out.push({ cls: h.cls, role: h.role, slot: s });
+  out.sort((a, b) => b.slot.upgrade.dPower - a.slot.upgrade.dPower);
+  return out;
+}
+
+export default function GearPanel({ gear }) {
+  const byStage = gear?.byStage || [];
+  const [stageKey, setStageKey] = useState(null);
+  const sel = useMemo(() => {
+    if (!byStage.length) return null;
+    const k = stageKey ?? (byStage.find((s) => s.current) || byStage[0]).key;
+    return byStage.find((s) => s.key === k) || byStage[0];
+  }, [byStage, stageKey]);
+
+  const general = flatten(gear?.general);
+  const stageSwaps = sel ? flatten(sel.heroes) : [];
+
+  return (
+    <>
+      {/* 1) UPGRADES DIRETOS — item é melhor no geral, independe da fase (TOPO) */}
+      <section className="sec">
+        <h2>Gear — upgrades diretos</h2>
+        <p className="lbl" style={{ marginBottom: 10 }}>
+          Itens que são melhores no geral
+        </p>
+        {general.length > 0 ? (
+          <div className="gear-list">
+            {general.map((u, i) => (
+              <SwapRow key={i} {...u} />
+            ))}
+          </div>
+        ) : (
+          <p className="muted">Nenhuma troca melhor no inventário. Tudo otimizado.</p>
+        )}
+      </section>
+
+      {/* 2) BUILD PRA UMA FASE — escolhe a fase, vê o que trocar pra aguentá-la */}
+      <section className="sec">
+        <h2>Gear — build pra uma fase</h2>
+        <div className="gear-stage-pick">
+          <span className="lbl">Escolha a fase</span>
+          <StageSelect
+            options={byStage}
+            value={sel?.key}
+            onChange={(k) => setStageKey(k)}
+          />
+        </div>
+        {stageSwaps.length > 0 ? (
+          <div className="gear-list">
+            {stageSwaps.map((u, i) => (
+              <SwapRow key={i} {...u} />
+            ))}
+          </div>
+        ) : (
+          <p className="muted">
+            Nada no inventário melhora o time pra essa fase. Veja a árvore de
+            skill/runas ou suba o nível dos itens.
+          </p>
+        )}
+      </section>
+    </>
   );
 }

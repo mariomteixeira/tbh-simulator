@@ -1,6 +1,8 @@
 import React from "react";
 import { fmt, fmtDur } from "../format.js";
 
+const ROLE_CLASS = { tank: "tank", dps: "dps", healer: "heal" };
+
 export default function Heroes({ sim, state, rates }) {
   const unspent = {};
   for (const h of state.heroes || []) unspent[h.key] = h.unspent;
@@ -15,7 +17,25 @@ export default function Heroes({ sim, state, rates }) {
         {sim.heroes.map((h) => (
           <div className="hero" key={h.key}>
             <div className="hero-head">
-              <span className="hero-name">{h.name}</span>
+              <span
+                className="hero-name"
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <img
+                  className="spr"
+                  src={`/heroicon/${h.key}.png`}
+                  alt={h.name}
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = "hidden";
+                  }}
+                />
+                {h.name}
+                {h.role && (
+                  <span className={"role " + (ROLE_CLASS[h.role] || "dps")}>
+                    {h.role}
+                  </span>
+                )}
+              </span>
               <span className="hero-level">Lv {h.level}</span>
             </div>
             <div className="hero-grid">

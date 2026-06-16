@@ -22,11 +22,24 @@ export default function DamagePanel({ heroes }) {
           return (
             <div className="dmg-hero" key={h.key}>
               <div className="dmg-head">
-                <b>{h.name}</b> <RoleTag role={h.role} />
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <img
+                    className="spr"
+                    src={`/heroicon/${h.key}.png`}
+                    alt={h.name}
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = "hidden";
+                    }}
+                  />
+                  <b>{h.name}</b> <RoleTag role={h.role} />
+                </span>
                 <span className="dmg-total">
-                  {fmt(h.dps)} dps efetivo
+                  {fmt(h.dps)} DPS
                   {h.buffDps > 0 && (
                     <span className="muted"> · ~{fmt(h.dpsBuffed)} c/ buffs</span>
+                  )}
+                  {h.ehp != null && (
+                    <span className="muted"> · {fmt(h.ehp)} EHP</span>
                   )}
                 </span>
               </div>
@@ -88,8 +101,15 @@ export default function DamagePanel({ heroes }) {
                     {u.name} <span className="muted">lv {u.level}</span>{" "}
                     <span className="util-tag">{u.kind}</span>
                   </span>
-                  <span className="dmg-calc muted">
-                    utilidade · recarga {u.cooldown}s · não dá dano
+                  <span className="dmg-calc">
+                    {u.healPct != null ? (
+                      <>
+                        cura <b className="v-exp">{u.healPct}% do HP máx</b>{" "}
+                        <span className="muted">· a cada {u.cooldown}s</span>
+                      </>
+                    ) : (
+                      <span className="muted">utilidade · recarga {u.cooldown}s</span>
+                    )}
                   </span>
                 </div>
               ))}

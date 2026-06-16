@@ -21,15 +21,16 @@ export default function BoxPanel({ farm, rates }) {
   return (
     <section className="sec">
       <h2>Baús — rota de drop</h2>
-      <p className="muted small">
-        A obtenção de baús é <b>limitada pelo jogo</b> (cap no chão + auto-abrir),
-        então baús/h é <b>medido do seu save</b> — não dá pra derivar da chance.
-        O que você controla é o <b>nível do bau</b>: farme a fase mais alta que
-        clera rápido. Seus bônus de chance: +{bonus.normal}% normal ·{" "}
-        +{bonus.boss}% boss.
-      </p>
 
       <div className="box-measured">
+        <div className="bm">
+          <i>bônus chance · normal</i>
+          <b className="v-gold">+{bonus.normal}%</b>
+        </div>
+        <div className="bm">
+          <i>bônus chance · boss</i>
+          <b className="v-gold">+{bonus.boss}%</b>
+        </div>
         <div className="bm">
           <i>baús normais/h (medido)</i>
           <b>{chests.normal != null ? chests.normal.toFixed(1) : "—"}</b>
@@ -68,12 +69,6 @@ export default function BoxPanel({ farm, rates }) {
           ))}
         </tbody>
       </table>
-
-      <p className="muted small" style={{ marginTop: 8 }}>
-        “Chance/run” é a referência da wiki com seus bônus — o teto, não a taxa
-        real. Melhor rota: o bau de <b>nível mais alto</b> entre as fases que
-        você limpa (a taxa medida não muda de fase pra fase se você mata rápido).
-      </p>
     </section>
   );
 }

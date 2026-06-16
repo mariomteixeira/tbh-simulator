@@ -51,6 +51,50 @@ RUNE_ICON_URL = "https://taskbarhero.wiki/game/runes/{}.png"
 RUNES_PAGE_URL = "https://taskbarhero.wiki/runes"
 
 
+def fetch_monster_elements(out_dir: Path, force: bool = False):
+    """Elemento de ATAQUE de cada monstro (Physical/Fire/Cold/Lightning/Chaos).
+
+    Nao esta nas tabelas (attackElements vem null; skills de monstro nao estao
+    em skills.json). Mas a PAGINA de cada monstro mostra 'Atk Element X'. Raspa
+    o sitemap -> paginas /monsters/<slug> -> mapeia por slug do nome (bosses tem
+    a chave no slug: '10901-skeleton-king')."""
+    import re
+    dest = out_dir / "monster_elements.json"
+    if dest.exists() and not force:
+        return
+    monsters_file = out_dir / "monsters.json"
+    if not monsters_file.exists():
+        return
+    mons = json.loads(monsters_file.read_text(encoding="utf-8-sig"))
+
+    def slug(s):
+        return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+    valid = {m["MonsterKey"] for m in mons}
+    slug2key = {slug((m.get("MonsterNameStringKey_i18n") or {}).get("en-US")):
+                m["MonsterKey"] for m in mons
+                if (m.get("MonsterNameStringKey_i18n") or {}).get("en-US")}
+    sm = fetch("https://taskbarhero.wiki/sitemap.xml").decode("utf-8", "replace")
+    urls = [u for u in re.findall(r"<loc>(.*?)</loc>", sm) if "/monsters/" in u]
+    elements = {}
+    for u in urls:
+        s = u.rstrip("/").split("/")[-1]
+        key = slug2key.get(s)
+        if key is None:
+            mm = re.match(r"(\d+)-", s)        # bosses: slug = {key}-{nome}
+            if mm and int(mm.group(1)) in valid:
+                key = int(mm.group(1))
+        try:
+            t = re.sub(r"<[^>]+>", " ", fetch(u).decode("utf-8", "replace"))
+        except Exception:
+            continue
+        el = re.search(r"Atk Element ([A-Za-z]+)", t)
+        if key and el:
+            elements[str(key)] = el.group(1)
+        time.sleep(0.1)
+    dest.write_text(json.dumps(elements, ensure_ascii=False), encoding="utf-8")
+    print(f"[ok]   monster_elements: {len(elements)}/{len(urls)} monstros")
+
+
 def fetch_rune_layout(out_dir: Path, force: bool = False):
     """Extrai as posicoes (x,y) da arvore de runas da pagina /runes da wiki.
 
@@ -145,6 +189,11 @@ def main():
     except Exception as e:
         print(f"[erro] rune_layout: {e}", file=sys.stderr)
         failed.append("rune_layout")
+    try:
+        fetch_monster_elements(OUT_DIR, force=args.force)
+    except Exception as e:
+        print(f"[erro] monster_elements: {e}", file=sys.stderr)
+        failed.append("monster_elements")
 
     print(f"\n{ok} baixadas, {skipped} ja existiam, {len(failed)} falharam")
     if failed:

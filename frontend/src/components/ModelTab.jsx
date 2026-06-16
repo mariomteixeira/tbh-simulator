@@ -18,12 +18,15 @@ export default function ModelTab({ sim, manualSamples }) {
         name: row?.name,
         observed: m.clearSec,
         dpsThen: m.partyDps,
+        ts: m.ts || 0,
         predicted: row ? row.clearTime : null,
         errPct: row ? ((row.clearTime - m.clearSec) / m.clearSec) * 100 : null,
       };
     })
-    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    .sort((a, b) => b.ts - a.ts); // mais recém-sincronizados primeiro
   const dpsNow = sim.party?.dps;
+  const [showAll, setShowAll] = React.useState(false);
+  const visibleCmp = showAll ? comparison : comparison.slice(0, 10);
 
   const killRate = sim.party?.dps && cal.factor ? sim.party.dps * cal.factor : null;
 
@@ -53,12 +56,8 @@ export default function ModelTab({ sim, manualSamples }) {
   return (
     <div className="model-grid">
       <section className="sec">
-        <h2>Calibrar tempo de clear (manual)</h2>
-        <p className="muted small">
-          Cronometre uma run e digite o tempo <b>em segundos</b> (o Records do
-          jogo mostra, ex.: "Cleared Stage 2-6. (257s)"). É a única fonte de
-          tempo do modelo — um único tempo já ancora a velocidade de kill.
-        </p>
+        <h2>Calibração</h2>
+        <p className="muted small">Insira seu tempo de run e digite o tempo abaixo:</p>
         {calRow ? (
           <div className="cal-form">
             <div className="cal-row">
@@ -118,7 +117,7 @@ export default function ModelTab({ sim, manualSamples }) {
                 </tr>
               </thead>
               <tbody>
-                {comparison.map((c) => (
+                {visibleCmp.map((c) => (
                   <tr key={c.key}>
                     <td>{c.label} <span className="muted">{c.name}</span></td>
                     <td>{Math.round(c.observed)}s</td>
@@ -136,6 +135,17 @@ export default function ModelTab({ sim, manualSamples }) {
                 ))}
               </tbody>
             </table>
+            {comparison.length > 10 && (
+              <button
+                className="link"
+                style={{ marginTop: 8 }}
+                onClick={() => setShowAll((s) => !s)}
+              >
+                {showAll
+                  ? "ver menos"
+                  : `ver mais (+${comparison.length - 10})`}
+              </button>
+            )}
             <p className="muted small" style={{ marginTop: 8 }}>
               O previsto usa seu DPS <b>atual</b> — se o time ficou mais forte
               desde a calibração, é normal o previsto ser menor que o tempo
@@ -169,39 +179,6 @@ export default function ModelTab({ sim, manualSamples }) {
             <b>{cal.factor ?? "—"}</b>
           </div>
         </div>
-        <p className="muted small" style={{ marginTop: 8 }}>
-          Economia (gold/exp por run) vem do reward dataminado da wiki, como o
-          Farming Planner. A amostragem automática foi removida: o contador de
-          "clears" do save conta várias vezes por run e gerava tempos ~5×
-          menores que o real.
-        </p>
-      </section>
-
-      <section className="sec">
-        <h2>Como o tempo é medido</h2>
-        <ul className="method-list">
-          <li>
-            <b>Você cronometra</b> uma run (ou copia do Records do jogo) e digita
-            em segundos. É a verdade-base; quanto mais fases, melhor a curva.
-          </li>
-          <li>
-            O modelo é <b>tempo = overhead·waves + HP ÷ velocidade de kill</b>,
-            ajustado às suas calibrações — igual ao Farming Planner da wiki.
-            Com 3+ tempos ele separa o overhead por wave da velocidade de kill.
-          </li>
-          <li>
-            EXP por hora aplica a <b>curva de EXP por nível</b> exata do jogo e
-            ancora no exp/h medido da sessão.
-          </li>
-          <li>
-            Baús por hora são <b>medidos dos contadores do save</b> — o drop é
-            limitado pelo jogo, não dá pra derivar da chance.
-          </li>
-          <li>
-            Bosses de ato não entram na tabela: a run de boss não é um loop
-            contínuo e o rendimento por hora não se aplica.
-          </li>
-        </ul>
       </section>
     </div>
   );
