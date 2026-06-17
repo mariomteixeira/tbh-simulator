@@ -1797,7 +1797,7 @@ def build_catalog(gd: GameData):
     items = {}
     for i in gd.items.values():
         gt = i.get("gear")
-        if not gt:
+        if not gt or i.get("deleted"):   # deleted=Obtainable:False (jogo removeu)
             continue
         items.setdefault(gt, []).append({
             "itemKey": i["id"], "name": _name(i.get("name")),
@@ -1816,6 +1816,8 @@ def build_catalog(gd: GameData):
         if not short:
             continue
         item = gd.items.get(k) or {}
+        if item.get("deleted"):          # gem removido do jogo (Obtainable:False)
+            continue
         groups = {}
         for cat, rows in (me.get("groups") or {}).items():
             if rows:
