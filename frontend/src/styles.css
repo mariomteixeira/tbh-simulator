@@ -1362,12 +1362,31 @@ button.link:hover { color: var(--st-bad); }
 .b-filters .lbl { flex: none; min-width: 48px; }
 .b-search { flex: 1; min-width: 150px; background: var(--bg); color: var(--ink); border: 2px solid var(--line-2); padding: 6px 9px; font-family: var(--mono); font-size: .8rem; }
 .b-search:focus { outline: none; border-color: var(--accent); }
-.b-toggle { padding: 5px 9px; cursor: pointer; font-family: var(--label); font-size: .54rem; text-transform: uppercase; color: var(--dim); background: var(--bg); border: 2px solid var(--line-2); }
-.b-toggle.on { color: var(--el-cold); border-color: var(--el-cold); }
-.b-chips { display: flex; gap: 5px; flex-wrap: wrap; }
-.b-chip { padding: 3px 7px; cursor: pointer; font-family: var(--label); font-size: .52rem; border: 2px solid var(--line-2); color: var(--dim); background: var(--bg); }
-.b-chip[data-on="1"] { color: var(--bg); background: var(--g, var(--accent)); border-color: var(--g, var(--accent)); }
-.b-chip.schip[data-on="1"] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.b-toggle { padding: 6px 11px; cursor: pointer; font-family: var(--label); font-size: .6rem; letter-spacing: .03em; text-transform: uppercase; color: var(--dim); background: var(--bg); border: 2px solid var(--line-2); }
+.b-toggle:hover { color: var(--ink); border-color: var(--dim); }
+.b-toggle.on { color: var(--bg); background: var(--el-cold); border-color: var(--el-cold); }
+.b-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.b-chip { padding: 5px 10px; cursor: pointer; font-family: var(--label); font-size: .6rem; letter-spacing: .04em; border: 2px solid var(--line-2); color: var(--dim); background: var(--bg); }
+.b-chip:hover { color: var(--ink); border-color: var(--dim); }
+/* tier: cada grau carrega SUA cor (cor = dado semântico do jogo); preenche ativo */
+.b-chip.tchip { color: var(--g); border-color: color-mix(in srgb, var(--g) 45%, var(--line-2)); }
+.b-chip.tchip:hover { border-color: var(--g); }
+.b-chip.tchip[data-on="1"] { color: var(--bg); background: var(--g); border-color: var(--g); box-shadow: 2px 2px 0 var(--shadow); }
+/* buff: accent */
+.b-chip.schip[data-on="1"] { color: var(--bg); background: var(--accent); border-color: var(--accent); box-shadow: 2px 2px 0 var(--shadow); }
+
+/* tooltip (hover em item/gem/slot) */
+.b-tip {
+  position: fixed; z-index: 200; pointer-events: none; max-width: 290px;
+  background: var(--panel-3); border: 2px solid var(--line-2);
+  box-shadow: 4px 4px 0 var(--shadow); padding: 9px 11px;
+  font-family: var(--mono); font-size: .76rem; color: var(--ink);
+}
+.b-tip .tip-name { font-family: var(--pixel); font-weight: 600; font-size: .96rem; display: block; margin-bottom: 5px; }
+.b-tip .tip-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.b-tip .tip-row i { font-style: normal; color: var(--dim); }
+.b-tip .tip-cat { font-family: var(--label); font-size: .54rem; text-transform: uppercase; }
+.b-tip .tip-sub { color: var(--dim); font-size: .72rem; margin-top: 5px; line-height: 1.5; }
 
 .b-range { position: relative; flex: 1; min-width: 190px; height: 26px; }
 .b-range .track { position: absolute; top: 11px; left: 0; right: 0; height: 4px; background: var(--line-2); }

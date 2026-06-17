@@ -131,6 +131,11 @@ function Editor({ build, catalog, ownedSet, onBack }) {
   const [filt, setFilt] = useState({ lvlMin: 1, lvlMax: LVL_MAX, search: "", tiers: new Set(), stats: new Set(), invOnly: false });
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tip, setTip] = useState(null);   // tooltip ao passar o mouse
+  const tipFor = (node) => ({
+    onMouseMove: (e) => setTip({ x: e.clientX, y: e.clientY, node }),
+    onMouseLeave: () => setTip(null),
+  });
 
   // recompute (debounced) sempre que o loadout mudar
   useEffect(() => {
@@ -201,11 +206,11 @@ function Editor({ build, catalog, ownedSet, onBack }) {
         <Catalog
           slot={slot} cat={cat} cap={cap} tab={tab} setTab={setTab}
           filt={filt} setFilt={setFilt} catalog={catalog} ownedSet={ownedSet}
-          onEquipItem={equipItem} onEquipGem={equipGem}
+          onEquipItem={equipItem} onEquipGem={equipGem} tipFor={tipFor}
         />
         {/* DIREITA: card do personagem + dados */}
         <aside className="card">
-          <Doll build={build} work={work} cap={catalog?.slotsByGrade} selIdx={selIdx} onSelect={selectSlot} />
+          <Doll build={build} work={work} cap={catalog?.slotsByGrade} selIdx={selIdx} onSelect={selectSlot} tipFor={tipFor} />
           <SelSock slot={slot} cap={cap} onRemove={removeSock} />
           <div className="kpis2">
             <div className="kpi2 dps">
@@ -227,12 +232,64 @@ function Editor({ build, catalog, ownedSet, onBack }) {
           </div>
         </aside>
       </div>
+      {tip && (
+        <div className="b-tip" style={{
+          left: Math.min(tip.x + 16, window.innerWidth - 300),
+          top: Math.min(tip.y + 16, window.innerHeight - 170),
+        }}>{tip.node}</div>
+      )}
     </main>
   );
 }
 
 function Delta({ v, unit }) {
   return <span className={v > 0 ? "b-up" : "b-down"}>{v > 0 ? "+" : ""}{fmt(v)} {unit}</span>;
+}
+
+/* ---------- tooltips (hover) ---------- */
+const TIP_CATS = [["WEAPON", "Arma"], ["ARMOR", "Armadura"], ["ACCESSORY", "Acessório"]];
+const modPt = (m) => (m === "MULTIPLICATIVE" ? "(more)" : m === "ADDITIVE" ? "(incr)" : "");
+function ItemTip({ r }) {
+  const g = gradeOf(r.grade);
+  return (
+    <>
+      <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
+      <div className="tip-row"><i style={{ color: g.c }}>{g.label}</i><span>Lv {r.level}</span></div>
+      {(r.stats || []).length > 0 && (
+        <div className="tip-sub">concede: {r.stats.map(statPt).join(", ")}</div>
+      )}
+    </>
+  );
+}
+function GemTip({ r }) {
+  const g = gradeOf(r.grade);
+  return (
+    <>
+      <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
+      {TIP_CATS.map(([k, lbl]) => {
+        const e = r.groups && r.groups[k];
+        if (!e) return null;
+        return (
+          <div className="tip-row" key={k}>
+            <i className="tip-cat">{lbl}</i>
+            <span>{statPt(e.stat)} {modPt(e.mod)} {e.min}~{e.max} · T{e.tier}</span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+function SlotTip({ s }) {
+  const g = gradeOf(s.grade);
+  return (
+    <>
+      <span className="tip-name" style={{ color: g.c }}>{s.item}</span>
+      <div className="tip-row"><i>{slotPt(s.gearType)}</i><span>{g.label} Lv{s.level}</span></div>
+      {s.sockets.length > 0 && (
+        <div className="tip-sub">{s.sockets.map((x) => x.gemName || statPt(x.stat)).join(" · ")}</div>
+      )}
+    </>
+  );
 }
 
 function StatList({ stats }) {
@@ -260,7 +317,7 @@ function StatList({ stats }) {
 }
 
 /* paper-doll: boneco no centro, gear em volta (arma/armadura esq., acessórios dir.) */
-function Doll({ build, work, cap, selIdx, onSelect }) {
+function Doll({ build, work, cap, selIdx, onSelect, tipFor }) {
   // posiciona cada slot: weapons+armor à esquerda (cols 1-2), accessories à dir (4-5)
   const cells = [];
   const counters = { WEAPON: 0, ARMOR: 0, ACCESSORY: 0 };
@@ -295,8 +352,8 @@ function Doll({ build, work, cap, selIdx, onSelect }) {
             key={i}
             className={"dslot" + (selIdx === i ? " sel" : "")}
             style={{ gridColumn: col, gridRow: row, "--g": g.c }}
-            title={`${slotPt(s.gearType)}: ${s.item} (${gradeOf(s.grade).label} Lv${s.level})`}
             onClick={() => onSelect(i)}
+            {...tipFor(<SlotTip s={s} />)}
           >
             <ItemIco k={s.itemKey} name={s.item} grade={s.grade} cls="dslot-img" />
             {pips.length > 0 && <span className="dpips">{pips}</span>}
@@ -350,7 +407,7 @@ const TABS = [
   { id: "engr", label: "Gravação", cls: "engr" },
   { id: "inscr", label: "Inscrição", cls: "inscr" },
 ];
-function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet, onEquipItem, onEquipGem }) {
+function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet, onEquipItem, onEquipGem, tipFor }) {
   if (!slot) return <section className="sec b-cat"><div className="b-empty">selecione um slot</div></section>;
   if (!catalog) return <section className="sec b-cat"><div className="b-empty">carregando catálogo…</div></section>;
   const g = gradeOf(slot.grade);
@@ -368,7 +425,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
   } else {
     rows = (catalog.gems[tab] || []).map((gm) => {
       const eff = gm.groups?.[cat];
-      return { kind: "gem", itemKey: gm.itemKey, name: gm.name, grade: gm.grade, eff, statKey: eff?.stat };
+      return { kind: "gem", itemKey: gm.itemKey, name: gm.name, grade: gm.grade, eff, statKey: eff?.stat, groups: gm.groups };
     }).filter((r) => r.eff);
   }
 
@@ -437,7 +494,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
               <span className="lbl">tier</span>
               <div className="b-chips">
                 {TIER_ORDER.map((gr) => (
-                  <button key={gr} className="b-chip" data-on={filt.tiers.has(gr) ? 1 : 0}
+                  <button key={gr} className="b-chip tchip" data-on={filt.tiers.has(gr) ? 1 : 0}
                     style={{ "--g": gradeOf(gr).c }} onClick={() => toggle("tiers", gr)}>{gr.slice(0, 4)}</button>
                 ))}
               </div>
@@ -462,7 +519,8 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
           const owned = ownedSet.has(r.itemKey);
           const full = r.kind === "gem" && slot.sockets.filter((x) => x.type === tab).length >= (cap[tab] || 0);
           return (
-            <div className={"b-opt" + (r.equipped ? " equipped" : "")} key={(r.itemKey || "x") + "_" + i} style={{ "--g": gr.c }}>
+            <div className={"b-opt" + (r.equipped ? " equipped" : "")} key={(r.itemKey || "x") + "_" + i}
+              style={{ "--g": gr.c }} {...tipFor(r.kind === "item" ? <ItemTip r={r} /> : <GemTip r={r} />)}>
               <ItemIco k={r.itemKey} name={r.name} grade={r.grade} cls="op-ico" />
               <div className="op-meta">
                 <span className="op-name" style={{ color: gr.c }}>
