@@ -1377,19 +1377,19 @@ button.link:hover { color: var(--st-bad); }
 
 /* tooltip (hover em item/gem/slot) */
 .b-tip {
-  position: fixed; z-index: 200; pointer-events: none; max-width: 290px;
-  background: var(--panel-3); border: 2px solid var(--line-2);
-  box-shadow: 4px 4px 0 var(--shadow); padding: 9px 11px;
-  font-family: var(--mono); font-size: .76rem; color: var(--ink);
+  position: fixed; z-index: 200; pointer-events: none; max-width: 360px;
+  background: var(--bg); border: 2px solid var(--accent-dim);
+  box-shadow: 5px 5px 0 var(--shadow); padding: 13px 15px;
+  font-family: var(--mono); font-size: .9rem; color: var(--ink); line-height: 1.5;
 }
-.b-tip .tip-name { font-family: var(--pixel); font-weight: 600; font-size: .96rem; display: block; margin-bottom: 5px; }
-.b-tip .tip-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.b-tip .tip-name { font-family: var(--pixel); font-weight: 600; font-size: 1.15rem; display: block; margin-bottom: 7px; }
+.b-tip .tip-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 2px 0; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .b-tip .tip-row i { font-style: normal; color: var(--dim); }
-.b-tip .tip-cat { font-family: var(--label); font-size: .54rem; text-transform: uppercase; color: var(--dim); }
-.b-tip .tip-sub { color: var(--dim); font-size: .72rem; margin-top: 5px; line-height: 1.5; }
-.b-tip .tip-stats { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
-.b-tip .tip-stat { font-variant-numeric: tabular-nums; color: var(--ink); }
-.b-tip .tip-catline { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; border-top: 2px solid var(--line); }
+.b-tip .tip-cat { font-family: var(--label); font-size: .62rem; text-transform: uppercase; color: var(--dim); }
+.b-tip .tip-sub { color: var(--dim); font-size: .82rem; margin-top: 6px; line-height: 1.5; }
+.b-tip .tip-stats { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.b-tip .tip-stat { font-size: .9rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+.b-tip .tip-catline { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; border-top: 2px solid var(--line); }
 .b-tip .tip-catline:first-child { border-top: none; padding-top: 0; }
 
 .b-range { position: relative; flex: 1; min-width: 190px; height: 26px; }

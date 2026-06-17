@@ -462,8 +462,8 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
   const isItem = tab === "item";
   let rows = [];
   if (isItem) {
-    const curStats = catalog.items[slot.gearType]?.find((it) => it.itemKey === slot.itemKey)?.stats || [];
-    const cur = { kind: "item", itemKey: slot.itemKey, name: slot.item, grade: slot.grade, level: slot.level, equipped: true, stats: curStats };
+    const curCat = catalog.items[slot.gearType]?.find((it) => it.itemKey === slot.itemKey);
+    const cur = { kind: "item", itemKey: slot.itemKey, name: slot.item, grade: slot.grade, level: slot.level, equipped: true, stats: curCat?.stats || [], statLines: curCat?.statLines || [] };
     const pool = (catalog.items[slot.gearType] || [])
       .filter((it) => it.itemKey !== slot.itemKey)
       .map((it) => ({ kind: "item", ...it }));
