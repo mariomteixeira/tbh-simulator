@@ -392,7 +392,10 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
       matchTxt(it.name) && matchStat(it));
     view = [cur, ...filtered];
   } else {
-    view = rows.filter((r) => (!filt.invOnly || ownedSet.has(r.itemKey)) && matchTxt(r.name) && matchStat(r));
+    // gems: ordena por tier (mais forte primeiro), nome como desempate
+    view = rows
+      .filter((r) => (!filt.invOnly || ownedSet.has(r.itemKey)) && matchTxt(r.name) && matchStat(r))
+      .sort((a, b) => (b.eff.tier || 0) - (a.eff.tier || 0) || (a.name || "").localeCompare(b.name || ""));
   }
 
   const set = (patch) => setFilt((f) => ({ ...f, ...patch }));
