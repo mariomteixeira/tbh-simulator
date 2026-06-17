@@ -158,6 +158,36 @@ def fetch(url: str) -> bytes:
         return resp.read()
 
 
+def prune_deleted(out_dir: Path):
+    """Remove gear com deleted=true (Obtainable:False — o jogo removeu) de
+    items.json / gear.json / items_detail.json. Reduz ~74% desses arquivos
+    (zipball do updater mais leve). Idempotente. Mantém STAGEBOX deletados
+    (ínfimos e referenciados por BoxData)."""
+    ip = out_dir / "items.json"
+    if not ip.exists():
+        return
+    items = json.loads(ip.read_text(encoding="utf-8-sig"))
+    drop = {i["id"] for i in items if i.get("deleted") and i.get("gear")}
+    if not drop:
+        return
+    ip.write_text(json.dumps([i for i in items if i["id"] not in drop],
+                             ensure_ascii=False), encoding="utf-8")
+    gp = out_dir / "gear.json"
+    if gp.exists():
+        gear = json.loads(gp.read_text(encoding="utf-8-sig"))
+        gp.write_text(json.dumps([g for g in gear if g.get("GearKey") not in drop],
+                                 ensure_ascii=False), encoding="utf-8")
+    dp = out_dir / "items_detail.json"
+    if dp.exists():
+        det = json.loads(dp.read_text(encoding="utf-8-sig"))
+        if isinstance(det, dict):
+            det = {k: v for k, v in det.items() if int(k) not in drop}
+        else:
+            det = [x for x in det if x.get("id") not in drop]
+        dp.write_text(json.dumps(det, ensure_ascii=False), encoding="utf-8")
+    print(f"[ok]   prune: {len(drop)} gear deleted removidos (items/gear/items_detail)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="rebaixa mesmo se ja existir")
@@ -181,6 +211,11 @@ def main():
         except Exception as e:
             print(f"[erro] {table}: {e}", file=sys.stderr)
             failed.append(table)
+
+    try:
+        prune_deleted(OUT_DIR)   # poda gear removido do jogo (Obtainable:False)
+    except Exception as e:
+        print(f"[erro] prune_deleted: {e}", file=sys.stderr)
 
     _, icon_failed = fetch_rune_icons(OUT_DIR, force=args.force)
     failed += icon_failed
