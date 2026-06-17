@@ -246,17 +246,54 @@ function Delta({ v, unit }) {
   return <span className={v > 0 ? "b-up" : "b-down"}>{v > 0 ? "+" : ""}{fmt(v)} {unit}</span>;
 }
 
-/* ---------- tooltips (hover) ---------- */
+/* ---------- tooltips (hover): cada stat numa linha, com valor + unidade ---------- */
 const TIP_CATS = [["WEAPON", "Arma"], ["ARMOR", "Armadura"], ["ACCESSORY", "Acessório"]];
-const modPt = (m) => (m === "MULTIPLICATIVE" ? "(more)" : m === "ADDITIVE" ? "(incr)" : "");
+const STAT_EN = {
+  AttackDamage: "Attack Damage", AttackSpeed: "Attack Speed", CastSpeed: "Cast Speed",
+  CriticalChance: "Critical Chance", CriticalDamage: "Critical Damage", CooldownReduction: "Cooldown Reduction",
+  MaxHp: "Max HP", Armor: "Armor", MovementSpeed: "Movement Speed", BlockChance: "Block Chance",
+  DodgeChance: "Dodge Chance", ElementalDodgeChance: "Elemental Dodge", HpRegenPerSec: "HP Regen",
+  AddHpPerHit: "HP per Hit", HpLeech: "HP Leech", SkillHealIncrease: "Skill Heal",
+  DamageAbsorption: "Damage Absorption", DamageReduction: "Damage Reduction",
+  ChaosResistance: "Chaos Resistance", FireResistance: "Fire Resistance", ColdResistance: "Cold Resistance",
+  LightningResistance: "Lightning Resistance", PhysicalResistance: "Physical Resistance",
+  AllElementalResistance: "All Elemental Res.", AreaOfEffect: "Area of Effect",
+  PhysicalDamagePercent: "Physical Damage", FireDamagePercent: "Fire Damage",
+  ColdDamagePercent: "Cold Damage", LightningDamagePercent: "Lightning Damage", ChaosDamagePercent: "Chaos Damage",
+};
+const engName = (s) => STAT_EN[s] || (s || "").replace(/([a-z])([A-Z])/g, "$1 $2");
+const PCT10 = new Set(["CriticalChance", "CriticalDamage", "CooldownReduction", "CastSpeed",
+  "BlockChance", "DodgeChance", "ElementalDodgeChance", "SkillHealIncrease", "DamageReduction"]);
+/* unidade/escala por stat e mod (More/Increased = value/1000 → %, Flat = escala nativa) */
+function statUnit(stat, mod) {
+  if (mod === "ADDITIVE") return { div: 10, suf: "% increased", dec: 1 };
+  if (mod === "MULTIPLICATIVE") return { div: 10, suf: "% more", dec: 1 };
+  if (stat === "AttackSpeed") return { div: 100, suf: "/s", dec: 2 };
+  if (stat === "HpRegenPerSec") return { div: 100, suf: "/s", dec: 1 };
+  if (stat === "DamageAbsorption") return { div: 10, suf: "", dec: 1 };
+  if (/Resistance$/.test(stat)) return { div: 1, suf: "%", dec: 0 };
+  if (/DamagePercent$/.test(stat) || PCT10.has(stat)) return { div: 10, suf: "%", dec: 1 };
+  return { div: 1, suf: "", dec: 0 }; // raw: dano, HP, armadura, movimento...
+}
+const nfmt = (v, u) => (u.dec ? (v / u.div).toFixed(u.dec).replace(".", ",") : Math.round(v / u.div).toLocaleString("pt-BR"));
+const statText = (stat, mod, value) => { const u = statUnit(stat, mod); return `${engName(stat)} +${nfmt(value, u)}${u.suf}`; };
+function statRange(stat, mod, mn, mx) {
+  if (mn === mx) return statText(stat, mod, mn);
+  const u = statUnit(stat, mod);
+  return `${engName(stat)} +${nfmt(mn, u)}~${nfmt(mx, u)}${u.suf}`;
+}
+
 function ItemTip({ r }) {
   const g = gradeOf(r.grade);
+  const lines = r.statLines || [];
   return (
     <>
       <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
       <div className="tip-row"><i style={{ color: g.c }}>{g.label}</i><span>Lv {r.level}</span></div>
-      {(r.stats || []).length > 0 && (
-        <div className="tip-sub">concede: {r.stats.map(statPt).join(", ")}</div>
+      {lines.length > 0 && (
+        <div className="tip-stats">
+          {lines.map((l, i) => <div className="tip-stat" key={i}>{statText(l.stat, l.mod, l.value)}</div>)}
+        </div>
       )}
     </>
   );
@@ -266,16 +303,18 @@ function GemTip({ r }) {
   return (
     <>
       <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
-      {TIP_CATS.map(([k, lbl]) => {
-        const e = r.groups && r.groups[k];
-        if (!e) return null;
-        return (
-          <div className="tip-row" key={k}>
-            <i className="tip-cat">{lbl}</i>
-            <span>{statPt(e.stat)} {modPt(e.mod)} {e.min}~{e.max} · T{e.tier}</span>
-          </div>
-        );
-      })}
+      <div className="tip-stats">
+        {TIP_CATS.map(([k, lbl]) => {
+          const e = r.groups && r.groups[k];
+          if (!e) return null;
+          return (
+            <div className="tip-catline" key={k}>
+              <span className="tip-cat">{lbl}</span>
+              <span className="tip-stat">{statRange(e.stat, e.mod, e.min, e.max)} · T{e.tier}</span>
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }
@@ -286,7 +325,14 @@ function SlotTip({ s }) {
       <span className="tip-name" style={{ color: g.c }}>{s.item}</span>
       <div className="tip-row"><i>{slotPt(s.gearType)}</i><span>{g.label} Lv{s.level}</span></div>
       {s.sockets.length > 0 && (
-        <div className="tip-sub">{s.sockets.map((x) => x.gemName || statPt(x.stat)).join(" · ")}</div>
+        <div className="tip-stats">
+          {s.sockets.map((x, i) => (
+            <div className="tip-stat" key={i}>
+              {x.gemName ? <span className="tip-cat">{x.gemName} </span> : null}
+              {x.stat ? statText(x.stat, x.mod, x.value) : ""}
+            </div>
+          ))}
+        </div>
       )}
     </>
   );

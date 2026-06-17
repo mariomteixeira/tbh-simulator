@@ -1772,21 +1772,24 @@ def hero_loadout(gd: GameData, save: dict, hero_save: dict):
     return out
 
 
-def _item_stat_types(gd: GameData, item: dict):
-    """Stats que o item concede (BaseStat + Inherent) — p/ filtro por buff."""
+def _item_stat_lines(gd: GameData, item: dict):
+    """Stats concretos do item (BaseStat + Inherent) com mod e VALOR reais
+    (do gear.json) — p/ o tooltip mostrar cada stat com seu número."""
     out = []
     gear = gd.gear.get(item.get("id"))
     gt = gd.gear_types.get(item.get("gear"))
-    if gt:
-        for k in ("BaseStat1_STATTYPE", "BaseStat2_STATTYPE"):
-            v = gt.get(k)
-            if v and v != "NONE" and v not in out:
-                out.append(v)
+    if gt and gear:
+        for n in (1, 2):
+            st = gt.get(f"BaseStat{n}_STATTYPE")
+            v = gear.get(f"BaseStat{n}_Value") or 0
+            if st and st != "NONE" and v:
+                out.append({"stat": st, "mod": gt.get(f"BaseStat{n}_MODTYPE"), "value": v})
     if gear:
         for i in (1, 2, 3):
-            v = gear.get(f"InherentStat{i}_STATTYPE")
-            if v and v != "NONE" and v not in out:
-                out.append(v)
+            st = gear.get(f"InherentStat{i}_STATTYPE")
+            v = gear.get(f"InherentStat{i}_Value") or 0
+            if st and st != "NONE" and v:
+                out.append({"stat": st, "mod": gear.get(f"InherentStat{i}_MODTYPE"), "value": v})
     return out
 
 
@@ -1799,10 +1802,12 @@ def build_catalog(gd: GameData):
         gt = i.get("gear")
         if not gt or i.get("deleted"):   # deleted=Obtainable:False (jogo removeu)
             continue
+        lines = _item_stat_lines(gd, i)
         items.setdefault(gt, []).append({
             "itemKey": i["id"], "name": _name(i.get("name")),
-            "grade": i.get("grade"), "level": i.get("level"),
-            "gearType": gt, "stats": _item_stat_types(gd, i),
+            "grade": i.get("grade"), "level": i.get("level"), "gearType": gt,
+            "stats": sorted({l["stat"] for l in lines}),  # tipos p/ filtro de buff
+            "statLines": lines,                            # stat+mod+valor p/ tooltip
         })
     for gt in items:
         items[gt].sort(key=lambda x: ((x["level"] or 0), x["name"] or ""))
