@@ -15,7 +15,9 @@ const FMT = {
   Armor: (d) => `${sign(d)}${fmt(abs(d))} armadura`,
   MovementSpeed: (d) => `${sign(d)}${fmt(abs(d))} mov.`,
   BlockChance: (d) => `${sign(d)}${(abs(d) / 10).toFixed(1)}% block`,
-  HpRegenPerSec: (d) => `${sign(d)}${fmt(abs(d))} regen/s`,
+  HpRegenPerSec: (d) => `${sign(d)}${(abs(d) / 100).toFixed(1)} regen/s`,
+  SkillHealIncrease: (d) => `${sign(d)}${(abs(d) / 10).toFixed(1)}% cura`,
+  DamageAbsorption: (d) => `${sign(d)}${(abs(d) / 10).toFixed(1)} absorção`,
 };
 
 const ELEM_PT = {

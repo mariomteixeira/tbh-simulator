@@ -96,6 +96,16 @@ class GameData:
         self.stat_mods = {(m["StatModKey"], m["Tier"]): m
                           for m in _load(gd_dir, "stat_mods")}
 
+        # detalhes de item (matEffects = Decoration/Engraving/Inscription); usado
+        # pela pagina de Builds (catalogo de gems + tipo de socket). Keyed por id.
+        try:
+            _idet = _load(gd_dir, "items_detail")
+            self.items_detail = ({int(k): v for k, v in _idet.items()}
+                                 if isinstance(_idet, dict)
+                                 else {i.get("id"): i for i in _idet})
+        except FileNotFoundError:
+            self.items_detail = {}
+
         # --- alquimia/cubo: escalas do CubeExp por item (grade/tipo/gear/lvl) ---
         self.grades = {g["GRADE"]: g for g in _load(gd_dir, "grades")}
         self.item_type_scales = {r["ItemType"]: r
@@ -279,7 +289,7 @@ def _rune_to_hero_stat(stat_type: str):
 # Stats que são "% de aumento PURO" (não têm base própria): FLAT e ADDITIVE
 # apenas SOMAM as fontes, não multiplicam. Ex.: SkillHealIncrease — gear dá 175
 # FLAT (+17,5%) e a passiva 700 ADDITIVE (+70%); total = 87,5%, não 175×1,7.
-_SUM_STATS = {"SkillHealIncrease"}
+_SUM_STATS = {"SkillHealIncrease", "DamageAbsorption"}
 
 
 class StatBag:
@@ -503,47 +513,67 @@ def alchemy_panel(gd: GameData, save: dict, runes: dict):
 
 
 def collect_hero(gd: GameData, save: dict, hero_save: dict, runes: dict,
-                 equip_override: list | None = None):
+                 equip_override: list | None = None, loadout: list | None = None):
     """Junta base + gear + encantos + passivas + runas num StatBag.
 
     equip_override: lista de UniqueIds para simular trocas de equipamento
     (usada pelo comparador de gear) sem mexer no save.
+    loadout: loadout HIPOTÉTICO da página de Builds — lista de
+    {itemKey, sockets:[{stat, mod, value}]} por slot. Substitui o gear do save
+    (itens + decorações/gravações/inscrições já resolvidos em stat/mod/valor).
     """
     bag = StatBag()
     hero = gd.heroes.get(hero_save["heroKey"]) or {}
     for st in BASE_STATS:
         bag.put(st, "FLAT", hero.get(st) or 0)
 
-    # gear equipado
-    item_by_uid = {it["UniqueId"]: it for it in save.get("itemSaveDatas") or []}
-    equipped = (equip_override if equip_override is not None
-                else hero_save.get("equippedItemIds") or [])
-    for uid in equipped:
-        if not uid:
-            continue
-        it = item_by_uid.get(uid)
-        if not it:
-            continue
-        gear = gd.gear.get(it["ItemKey"])
-        item = gd.items.get(it["ItemKey"])
-        if gear and item:
-            gt = gd.gear_types.get(item.get("gear"))
-            if gt:
-                bag.put(gt.get("BaseStat1_STATTYPE"), gt.get("BaseStat1_MODTYPE"),
-                        gear.get("BaseStat1_Value") or 0)
-                bag.put(gt.get("BaseStat2_STATTYPE"), gt.get("BaseStat2_MODTYPE"),
-                        gear.get("BaseStat2_Value") or 0)
-            for i in (1, 2, 3):
-                bag.put(gear.get(f"InherentStat{i}_STATTYPE"),
-                        gear.get(f"InherentStat{i}_MODTYPE"),
-                        gear.get(f"InherentStat{i}_Value") or 0)
-        # encantos: o save guarda o valor rolado; tipo vem de stat_mods
-        for e in it.get("EnchantData") or []:
-            if not e or not e.get("StatModKey"):
+    def _apply_gear_item(item_key):
+        """Aplica BaseStat1/2 + InherentStat1-3 de um item (base do gear)."""
+        gear = gd.gear.get(item_key)
+        item = gd.items.get(item_key)
+        if not (gear and item):
+            return
+        gt = gd.gear_types.get(item.get("gear"))
+        if gt:
+            bag.put(gt.get("BaseStat1_STATTYPE"), gt.get("BaseStat1_MODTYPE"),
+                    gear.get("BaseStat1_Value") or 0)
+            bag.put(gt.get("BaseStat2_STATTYPE"), gt.get("BaseStat2_MODTYPE"),
+                    gear.get("BaseStat2_Value") or 0)
+        for i in (1, 2, 3):
+            bag.put(gear.get(f"InherentStat{i}_STATTYPE"),
+                    gear.get(f"InherentStat{i}_MODTYPE"),
+                    gear.get(f"InherentStat{i}_Value") or 0)
+
+    if loadout is not None:
+        # loadout hipotético (Builds): item por slot + sockets já resolvidos
+        for ent in loadout:
+            if ent.get("itemKey"):
+                _apply_gear_item(ent["itemKey"])
+            for sk in ent.get("sockets") or []:
+                st, md = sk.get("stat"), sk.get("mod")
+                if st and md and st != "NONE":
+                    bag.put(st, md, sk.get("value") or 0)
+    else:
+        # gear equipado (save)
+        item_by_uid = {it["UniqueId"]: it for it in save.get("itemSaveDatas") or []}
+        equipped = (equip_override if equip_override is not None
+                    else hero_save.get("equippedItemIds") or [])
+        for uid in equipped:
+            if not uid:
                 continue
-            sm = gd.stat_mods.get((e["StatModKey"], e.get("Tier")))
-            if sm:
-                bag.put(sm["STATTYPE"], sm["MODTYPE"], e.get("Value") or 0)
+            it = item_by_uid.get(uid)
+            if not it:
+                continue
+            _apply_gear_item(it["ItemKey"])
+            # encantos + gems socketados: o save guarda o valor rolado; o tipo
+            # (stat/mod) vem de stat_mods. Decoração/gravação/inscrição entram
+            # por aqui também (são linhas de EnchantData com StatModKey válido).
+            for e in it.get("EnchantData") or []:
+                if not e or not e.get("StatModKey"):
+                    continue
+                sm = gd.stat_mods.get((e["StatModKey"], e.get("Tier")))
+                if sm:
+                    bag.put(sm["STATTYPE"], sm["MODTYPE"], e.get("Value") or 0)
 
     # arvore de atributos (passivas)
     for a in save.get("attributeSaveDatas") or []:
@@ -882,6 +912,13 @@ def _taken_fraction(stats: dict, stage_level: int, hit: float, el: str,
     return max(1 - res / 100.0, 0.0) if res >= 0 else 1 + abs(res) / 100.0
 
 
+def _final_mult(stats: dict) -> float:
+    """DamageReduction = multiplicador do dano final ×(1 − DR). (DamageAbsorption
+    NÃO é %: é flat, subtraído à parte no hero_ehp.)"""
+    dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
+    return 1 - dr
+
+
 def hero_ehp(stats: dict, stage_level: int, hit: float, elements, difficulty=None):
     """EHP contra um estagio: HP / fracao de dano que passa.
 
@@ -896,23 +933,32 @@ def hero_ehp(stats: dict, stage_level: int, hit: float, elements, difficulty=Non
     da fase (mapas mais difíceis reduzem sua resistência elemental)."""
     hp = stats.get("MaxHp") or 0
     penalty = _DIFF_RES_PENALTY.get(difficulty, 0.0)
+    drm = _final_mult(stats)                              # ×(1 − DamageReduction)
+    absorb = (stats.get("DamageAbsorption") or 0) / 10.0  # FLAT (físico), escala /10
+
+    def taken_frac(el, h):
+        # pipeline real: resist/armadura -> ×(1-DR) -> Absorption (subtrai flat de
+        # QUALQUER dano, incl. elemental) -> piso de 1 de dano por golpe. Absorption
+        # é forte contra golpe PEQUENO e quase nada contra golpe grande (por ser flat).
+        frac = _taken_fraction(stats, stage_level, h, el, penalty)
+        if h <= 0:                                        # sem golpe real (testes): só a fração
+            return frac * drm
+        amt = max(h * frac * drm - absorb, 1.0)           # absorção flat + piso 1 por golpe
+        return amt / h
+
     if isinstance(elements, dict):
         # dict {elemento: golpe}: média do "taken" PONDERADA pelo golpe — o
         # físico costuma ser o MAIOR; ignorá-lo apagaria a armadura do cálculo.
         pairs = [(el, h) for el, h in elements.items() if h and h > 0]
         if not pairs:
-            pairs = [("Physical", hit)]
-        num = sum(h * _taken_fraction(stats, stage_level, h, el, penalty)
-                  for el, h in pairs)
+            pairs = [("Physical", hit or 1.0)]
+        num = sum(h * taken_frac(el, h) for el, h in pairs)
         den = sum(h for _, h in pairs)
         avg_taken = num / den if den else 1.0
     else:
         # lista[str] (legado): mesmo golpe escalar pra todos, PESO IGUAL
         els = elements or ["Physical"]
-        avg_taken = sum(_taken_fraction(stats, stage_level, hit, el, penalty)
-                        for el in els) / len(els)
-    dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
-    avg_taken *= (1 - dr)
+        avg_taken = sum(taken_frac(el, hit) for el in els) / len(els)
     return hp / max(avg_taken, 0.01)
 
 
@@ -931,8 +977,8 @@ def resist_needed(stats: dict, stage_level: int, hit: float, el: str,
     hp = stats.get("MaxHp") or 0
     if hp <= 0:
         return None
-    dr = min((stats.get("DamageReduction") or 0) / PCT, 0.9)
-    if dr >= 1:
+    fm = _final_mult(stats)   # (1-DR)·(1-Absorption): reduções de dano final
+    if fm <= 0:
         return None
     penalty = _DIFF_RES_PENALTY.get(difficulty, 0.0)
     res = stats.get(f"{el}Resistance") or 0
@@ -943,13 +989,13 @@ def resist_needed(stats: dict, stage_level: int, hit: float, el: str,
     cap = _RES_CAP + (stats.get(f"Max{el}Resistance") or 0)
     res_eff = min(res, cap)
     taken_cur = (max(1 - res_eff / 100.0, 0.0) if res_eff >= 0
-                 else 1 + abs(res_eff) / 100.0) * (1 - dr)
+                 else 1 + abs(res_eff) / 100.0) * fm
     hits_cur = hp / max(taken_cur, 1e-9) / hit
     if hits_cur >= target_hits:
         return None
     # fração de dano alvo p/ aguentar target_hits, e a resist efetiva que a dá
     taken_tgt = hp / (target_hits * hit)
-    res_tgt = 100.0 * (1 - taken_tgt / (1 - dr))
+    res_tgt = 100.0 * (1 - taken_tgt / fm)
     if res_tgt > cap:                 # nem no teto aguenta só com resist
         return {"points": max(0, round(cap - res_eff)), "capped": True,
                 "resNow": round(res_eff), "resTarget": round(cap)}
@@ -1178,10 +1224,13 @@ ROLE_WDPS = {"tank": 0.25, "dps": 0.75, "healer": 0.5}
 
 def _heal_rate(stats: dict) -> float:
     """Ritmo de cura relativo da Priest: sobe com Cast Speed e Recarga (CDR) —
-    são eles que fazem ela curar mais vezes. (A cura em si é % do HP do alvo.)"""
+    eles fazem ela curar mais VEZES — e com SkillHealIncrease, que aumenta o
+    TAMANHO de cada cura (ex.: +87,5% na Priest). Assim o advisor valoriza gear
+    de cura/recarga na healer."""
     cast = max((stats.get("CastSpeed") or 100) / 100.0, 0.1)
     cdr = min((stats.get("CooldownReduction") or 0) / PCT, 0.75)
-    return cast / (1 - cdr)
+    heal_boost = 1 + (stats.get("SkillHealIncrease") or 0) / PCT
+    return cast / (1 - cdr) * heal_boost
 
 
 def _offense_axis(role: str, dmg: dict, stats: dict) -> float:
@@ -1674,6 +1723,147 @@ def combat_focus(gd: GameData, save: dict, fielded_saves: list, runes: dict,
     return out
 
 
+# ---------------------------------------------------------------------------
+# Builds: loadout atual, catalogo de itens/gems e what-if (recalculo)
+# ---------------------------------------------------------------------------
+_TYPE_SHORT = {"DECORATION": "deco", "ENGRAVING": "engr", "INSCRIPTION": "inscr"}
+
+
+def _socket_short_type(gd: GameData, enchant_row: dict):
+    """Tipo do socket (deco/engr/inscr) pelo matEffects do material aplicado."""
+    det = gd.items_detail.get(enchant_row.get("MaterialKey")) or {}
+    t = (det.get("matEffects") or {}).get("type")
+    return _TYPE_SHORT.get(t)
+
+
+def hero_loadout(gd: GameData, save: dict, hero_save: dict):
+    """Loadout ATUAL do herói: por slot, item equipado + sockets resolvidos
+    (stat/mod/valor já prontos para o what-if e para o paper-doll)."""
+    item_by_uid = {it["UniqueId"]: it for it in save.get("itemSaveDatas") or []}
+    hero_row = gd.heroes.get(hero_save["heroKey"]) or {}
+    uids = list(hero_save.get("equippedItemIds") or [])
+    out = []
+    for slot in range(10):
+        gt = _slot_gear_type(hero_row, slot)
+        if not gt:
+            continue
+        uid = uids[slot] if slot < len(uids) else 0
+        it = item_by_uid.get(uid) if uid else None
+        if not it:
+            out.append({"slot": slot, "gearType": gt, "itemKey": None,
+                        "name": None, "grade": None, "level": None, "sockets": []})
+            continue
+        item = gd.items.get(it["ItemKey"]) or {}
+        socks = []
+        for e in it.get("EnchantData") or []:
+            if not e or not e.get("StatModKey"):
+                continue
+            sm = gd.stat_mods.get((e["StatModKey"], e.get("Tier"))) or {}
+            mat = gd.items.get(e.get("MaterialKey")) or {}
+            socks.append({
+                "type": _socket_short_type(gd, e),
+                "stat": sm.get("STATTYPE"), "mod": sm.get("MODTYPE"),
+                "value": e.get("Value") or 0, "tier": e.get("Tier"),
+                "gemKey": e.get("MaterialKey"), "gemName": _name(mat.get("name")),
+            })
+        out.append({"slot": slot, "gearType": gt, "itemKey": it["ItemKey"],
+                    "name": _name(item.get("name")), "grade": item.get("grade"),
+                    "level": item.get("level"), "sockets": socks})
+    return out
+
+
+def _item_stat_types(gd: GameData, item: dict):
+    """Stats que o item concede (BaseStat + Inherent) — p/ filtro por buff."""
+    out = []
+    gear = gd.gear.get(item.get("id"))
+    gt = gd.gear_types.get(item.get("gear"))
+    if gt:
+        for k in ("BaseStat1_STATTYPE", "BaseStat2_STATTYPE"):
+            v = gt.get(k)
+            if v and v != "NONE" and v not in out:
+                out.append(v)
+    if gear:
+        for i in (1, 2, 3):
+            v = gear.get(f"InherentStat{i}_STATTYPE")
+            if v and v != "NONE" and v not in out:
+                out.append(v)
+    return out
+
+
+def build_catalog(gd: GameData):
+    """Catalogo p/ a pagina de Builds: itens equipaveis por tipo de gear e gems
+    (decoracao/gravacao/inscricao) com efeito por categoria. So depende do
+    datamine — montado uma vez."""
+    items = {}
+    for i in gd.items.values():
+        gt = i.get("gear")
+        if not gt:
+            continue
+        items.setdefault(gt, []).append({
+            "itemKey": i["id"], "name": _name(i.get("name")),
+            "grade": i.get("grade"), "level": i.get("level"),
+            "gearType": gt, "stats": _item_stat_types(gd, i),
+        })
+    for gt in items:
+        items[gt].sort(key=lambda x: ((x["level"] or 0), x["name"] or ""))
+
+    gems = {"deco": [], "engr": [], "inscr": []}
+    for k, det in gd.items_detail.items():
+        me = (det or {}).get("matEffects")
+        if not me:
+            continue
+        short = _TYPE_SHORT.get(me.get("type"))
+        if not short:
+            continue
+        item = gd.items.get(k) or {}
+        groups = {}
+        for cat, rows in (me.get("groups") or {}).items():
+            if rows:
+                r = rows[0]
+                groups[cat] = {"stat": r.get("stat"), "mod": r.get("mod"),
+                               "min": r.get("min"), "max": r.get("max"),
+                               "tier": r.get("tier")}
+        gems[short].append({
+            "itemKey": k, "name": _name(item.get("name")) or det.get("name"),
+            "grade": item.get("grade"), "groups": groups,
+        })
+    for t in gems:
+        gems[t].sort(key=lambda x: x["name"] or "")
+    return {"items": items, "gems": gems,
+            "slotsByGrade": {g: {"deco": v.get("ExtraSlotAmount_Decoration", 0),
+                                 "engr": v.get("ExtraSlotAmount_Engraving", 0),
+                                 "inscr": v.get("ExtraSlotAmount_Inscription", 0)}
+                             for g, v in gd.grades.items()}}
+
+
+def current_stage_ctx(gd: GameData, save: dict):
+    """Contexto da fase atual (nível/golpe/elementos/dificuldade) p/ o EHP do
+    what-if — mesma referência que o simulate usa pro time."""
+    cs = save.get("commonSaveData") or {}
+    key = cs.get("currentStageKey")
+    econ = gd.stage_econ(key)
+    return {"stageKey": key,
+            "level": econ["lvl"] if econ else 1,
+            "hit": econ["biggestHit"] if econ else 0,
+            "elems": (econ.get("elemHits") if econ else None) or None,
+            "diff": (gd.stages.get(key) or {}).get("STAGEDIFFICULITY")}
+
+
+def whatif_hero(gd: GameData, save: dict, hero_save: dict, runes: dict,
+                loadout: list, ctx: dict | None = None):
+    """Recalcula dps/ehp/stats de um herói com um loadout HIPOTÉTICO (itens +
+    gems). Mesmo motor do save — só troca a fonte do gear."""
+    ctx = ctx or current_stage_ctx(gd, save)
+    stats = collect_hero(gd, save, hero_save, runes, loadout=loadout)
+    dmg = hero_damage(gd, save, hero_save, stats)
+    ehp = hero_ehp(stats, ctx["level"], ctx["hit"], ctx["elems"],
+                   difficulty=ctx.get("diff"))
+    return {"dps": round(dmg["dps"], 1), "statusDps": round(dmg["statusDps"], 1),
+            "autoDps": round(dmg["autoDps"], 1), "skillDps": round(dmg["skillDps"], 1),
+            "ehp": round(ehp, 1), "damage": dmg["breakdown"],
+            "stats": {k: round(v, 2) for k, v in stats.items()}}
+
+
 def simulate(gd: GameData, save: dict, measured: dict | None = None,
              samples: list | None = None, stage_stats: dict | None = None,
              ceiling: int | None = None):
@@ -2004,8 +2194,37 @@ def simulate(gd: GameData, save: dict, measured: dict | None = None,
         drop_n_mult=drop_n_mult, drop_b_mult=drop_b_mult,
         t_wave=t_wave, gold_now=gold_now)
 
+    # --- builds: TODOS os heróis do save (em campo + reserva), com loadout
+    # atual e métricas — base pra página de Builds (roster + paper-doll).
+    fielded_set = set(fielded)
+    builds = []
+    for hs in save.get("heroSaveDatas") or []:
+        hk = hs.get("heroKey")
+        hr = gd.heroes.get(hk) or {}
+        b_stats = collect_hero(gd, save, hs, runes)
+        b_dmg = hero_damage(gd, save, hs, b_stats)
+        b_ehp = hero_ehp(b_stats, ref_level, ref_hit, ref_elems, difficulty=cur_diff)
+        builds.append({
+            "key": hk,
+            # nome em inglês na página de Builds (ClassType = Ranger/Knight/...)
+            "name": hr.get("ClassType") or _name(hr.get("HeroNameKey_i18n"), "en-US"),
+            "cls": hr.get("ClassType"), "role": HERO_ROLE.get(hk, "dps"),
+            "level": hs.get("HeroLevel"), "fielded": hk in fielded_set,
+            "dps": round(b_dmg["dps"], 1), "statusDps": round(b_dmg["statusDps"], 1),
+            "ehp": round(b_ehp, 1), "damage": b_dmg["breakdown"],
+            "stats": {k: round(v, 2) for k, v in b_stats.items()},
+            "loadout": hero_loadout(gd, save, hs),
+        })
+
+    # itens/gems POSSUÍDOS (ItemKeys do inventário) — p/ "tenho"/só-inventário
+    owned = sorted({it.get("ItemKey") for it in save.get("itemSaveDatas") or []
+                    if it.get("ItemKey")})
+
     result = {
         "heroes": heroes,
+        "builds": builds,
+        "owned": owned,
+        "buildsStage": {"key": cur_key, "level": ref_level, "diff": cur_diff},
         "party": {"dps": party_dps, "ehpMin": party_ehp_min,
                   "size": len(heroes), "level": party_level},
         "calibration": calib,

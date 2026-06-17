@@ -11,10 +11,12 @@ import OfflinePanel from "./components/OfflinePanel.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 import RunesPage from "./components/RunesPage.jsx";
 import CubePanel from "./components/CubePanel.jsx";
+import BuildsPage from "./components/BuildsPage.jsx";
 
 const ROUTES = [
   { id: "farm", hash: "#/", label: "Farm", group: "Painel", icon: "i-farm" },
   { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel", icon: "i-box" },
+  { id: "builds", hash: "#/builds", label: "Builds", group: "Painel", icon: "i-build" },
   { id: "cube", hash: "#/cubo", label: "Cubo", group: "Painel", icon: "i-cube" },
   { id: "runes", hash: "#/runas", label: "Runas", group: "Painel", icon: "i-rune" },
   { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel", icon: "i-hero" },
@@ -39,6 +41,11 @@ function NavIcons() {
         <g id="i-cube">
           <path d="M4 4h8v8H4z" fill="none" stroke="currentColor" strokeWidth="2" />
           <rect x="4" y="4" width="8" height="2" />
+        </g>
+        <g id="i-build">
+          <rect x="3" y="2" width="10" height="3" />
+          <rect x="3" y="6" width="4" height="8" />
+          <rect x="9" y="6" width="4" height="8" />
         </g>
         <g id="i-rune">
           <path d="M8 2l5 5-5 7-5-7z" />
@@ -349,6 +356,8 @@ export default function App() {
           <div className="loading">aguardando primeira leitura do save…</div>
         ) : route.id === "runes" ? (
           <RunesPage key="runes" runes={sim?.runes} />
+        ) : route.id === "builds" ? (
+          <BuildsPage key="builds" sim={sim} />
         ) : route.id === "cube" ? (
           <CubePanel key="cube" alchemy={sim?.alchemy} />
         ) : (

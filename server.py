@@ -30,7 +30,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import tbh_tracker as core
-from simulator import GameData, simulate
+from simulator import (GameData, simulate, build_catalog, whatif_hero,
+                       current_stage_ctx, rune_stats)
 from store import Store
 
 ROOT = Path(__file__).parent
@@ -92,6 +93,11 @@ class CeilingIn(BaseModel):
     stage: int          # chave da fase mais alta que voce farma com confianca
 
 
+class WhatIfIn(BaseModel):
+    heroKey: int        # heroi a recalcular
+    loadout: list       # [{itemKey, sockets:[{stat, mod, value}]}] por slot
+
+
 class SaveWatcher:
     """Thread que vigia o save e mantem o ultimo estado pronto para a API."""
 
@@ -112,6 +118,7 @@ class SaveWatcher:
         self.error = None
         self.last_read = None      # epoch da ultima leitura ok
         self._inner = None         # ultimo save decriptado (cache p/ resimulate)
+        self._catalog = None       # catalogo de itens/gems (Builds), montado 1x
 
         self.gamedata = None
         self.gamedata_error = None
@@ -302,6 +309,37 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
         removed = watcher.store.remove_manual_sample(stage)
         watcher.resimulate()
         return {"ok": True, "removed": removed}
+
+    @app.get("/api/catalog")
+    def api_catalog():
+        """Catalogo de itens equipaveis + gems (decoracao/gravacao/inscricao)
+        pra pagina de Builds. So depende do datamine — montado uma vez e cacheado."""
+        if not watcher.gamedata:
+            return {"error": watcher.gamedata_error or "gamedata indisponivel"}
+        if watcher._catalog is None:
+            watcher._catalog = build_catalog(watcher.gamedata)
+        return watcher._catalog
+
+    @app.post("/api/whatif")
+    def api_whatif(body: WhatIfIn):
+        """Recalcula dps/ehp/stats de um heroi com um loadout HIPOTETICO
+        (itens + gems). 100% read-only: nada e gravado no save."""
+        gd = watcher.gamedata
+        inner = watcher._inner
+        if not gd:
+            return {"error": watcher.gamedata_error or "gamedata indisponivel"}
+        if not inner:
+            return {"error": "save ainda nao lido"}
+        hs = next((h for h in inner.get("heroSaveDatas") or []
+                   if h.get("heroKey") == body.heroKey), None)
+        if not hs:
+            return {"error": f"heroi {body.heroKey} nao encontrado"}
+        try:
+            runes = rune_stats(gd, inner)
+            ctx = current_stage_ctx(gd, inner)
+            return whatif_hero(gd, inner, hs, runes, body.loadout, ctx)
+        except Exception as e:
+            return {"error": f"falha no recalculo: {e}"}
 
     @app.post("/api/ceiling")
     def set_ceiling(body: CeilingIn):
