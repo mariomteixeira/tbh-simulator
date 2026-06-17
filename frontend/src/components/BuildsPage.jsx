@@ -66,9 +66,12 @@ function RoleTag({ role }) {
 
 /* ---------------- roster ---------------- */
 function Roster({ builds, onPick }) {
+  // só heróis em uso: em campo OU com nível investido (esconde os Lv1 intocados)
   const list = useMemo(
-    () => [...builds].sort((a, b) =>
-      (b.fielded ? 1 : 0) - (a.fielded ? 1 : 0) || (b.level || 0) - (a.level || 0)),
+    () => builds
+      .filter((h) => h.fielded || (h.level || 0) > 1)
+      .sort((a, b) =>
+        (b.fielded ? 1 : 0) - (a.fielded ? 1 : 0) || (b.level || 0) - (a.level || 0)),
     [builds]
   );
   return (

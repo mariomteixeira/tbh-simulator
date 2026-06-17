@@ -1283,7 +1283,9 @@ button.link:hover { color: var(--st-bad); }
 /* ============================================================ *
  *  BUILDS — roster (cards) + editor (lista | paper-doll)
  * ============================================================ */
-.builds-page { display: flex; flex-direction: column; gap: 18px; }
+/* .page base usa align-items:start (layout de rail); no flex-column do builds
+   isso impede o roster/editor de esticar — força stretch p/ ocupar a largura */
+.builds-page { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
 .builds-page > h1 { margin-bottom: 2px; }
 
 /* ícones (img + fallback de iniciais) */
