@@ -119,8 +119,8 @@ export default function StatFinderPage({ sim }) {
   };
   const view = entries.filter(passes);
   const rank = (g) => TIER_ORDER.indexOf(g);
-  view.sort((a, b) => rank(b.grade) - rank(a.grade)
-    || (b.maxTier || 0) - (a.maxTier || 0) || (b.maxVal || 0) - (a.maxVal || 0)
+  view.sort((a, b) => rank(a.grade) - rank(b.grade)        // menor tier -> maior
+    || (a.maxTier || 0) - (b.maxTier || 0) || (a.maxVal || 0) - (b.maxVal || 0)
     || (a.name || "").localeCompare(b.name || ""));
   const shown = view.slice(0, CAP);
   const gems = shown.filter((e) => e.kind === "gem");
@@ -136,7 +136,10 @@ export default function StatFinderPage({ sim }) {
 
   const card = (e, i) => {
     const gr = gradeOf(e.grade);
-    const lines = e.kind === "gem" ? e.opts : e.lines;
+    const lines0 = e.kind === "gem" ? e.opts : e.lines;
+    // inscrição rola 1 de ~16: só mostra o bônus quando há atributo selecionado
+    const lines = attrs.size ? lines0.filter((l) => attrs.has(l.stat))
+      : (e.srcType === "inscr" ? [] : lines0);
     const sub = e.kind === "gem"
       ? `${SRC_LABEL[e.srcType]} · ${gr.label}`
       : `${gearPt(e.gearType)} · Lv${e.level} · ${gr.label}`;
@@ -151,14 +154,16 @@ export default function StatFinderPage({ sim }) {
           </div>
           {e.kind === "gem" && <span className="acard-tier">{tierLabel(e.maxTier)}</span>}
         </div>
-        <div className="acard-stats">
-          {lines.map((l, j) => (
-            <div className={"acard-stat" + (attrs.has(l.stat) ? " hit" : "")} key={j}>
-              <span>{statPt(l.stat)}</span>
-              <span className="v">{e.kind === "gem" ? valRange(l.stat, l.mod, l.min, l.max) : valText(l.stat, l.mod, l.value)}</span>
-            </div>
-          ))}
-        </div>
+        {lines.length > 0 && (
+          <div className="acard-stats">
+            {lines.map((l, j) => (
+              <div className={"acard-stat" + (attrs.has(l.stat) ? " hit" : "")} key={j}>
+                <span>{statPt(l.stat)}</span>
+                <span className="v">{e.kind === "gem" ? valRange(l.stat, l.mod, l.min, l.max) : valText(l.stat, l.mod, l.value)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };

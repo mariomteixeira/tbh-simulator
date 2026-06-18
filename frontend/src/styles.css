@@ -1302,22 +1302,22 @@ button.link:hover { color: var(--st-bad); }
 .finder-sec-h .ln { flex: 1; height: 2px; background: var(--line); }
 .finder-sec-h .n { font-family: var(--mono); font-size: .7rem; color: var(--faint); }
 
-/* grid de cards */
-.acard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-bottom: 26px; }
+/* grid de cards (compacto) */
+.acard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(214px, 1fr)); gap: 11px; margin-bottom: 22px; }
 .acard { position: relative; background: var(--panel); border: 2px solid var(--line-2);
-  box-shadow: 3px 3px 0 var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
+  box-shadow: 2px 2px 0 var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
 .acard::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--g, var(--line-2)); }
-.acard:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--shadow); }
-.acard-h { display: flex; align-items: flex-start; gap: 11px; padding: 13px 13px 9px; }
-.acard-ico { width: 46px; height: 46px; flex: none; border: 2px solid var(--g, var(--line-2));
+.acard:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--shadow); }
+.acard-h { display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px 8px; }
+.acard-ico { width: 36px; height: 36px; flex: none; border: 2px solid var(--g, var(--line-2));
   background: var(--panel-3); object-fit: contain; image-rendering: pixelated; }
-.acard-ico.fb { display: inline-flex; align-items: center; justify-content: center; font-family: var(--label); font-size: .6rem; color: var(--g); }
+.acard-ico.fb { display: inline-flex; align-items: center; justify-content: center; font-family: var(--label); font-size: .54rem; color: var(--g); }
 .acard-id { min-width: 0; }
-.acard-nm { font-family: var(--pixel); font-weight: 600; font-size: 1.02rem; color: var(--g); line-height: 1.05; display: block; }
-.acard-sub { font-family: var(--mono); font-size: .68rem; color: var(--dim); margin-top: 4px; display: block; }
-.acard-tier { margin-left: auto; font-family: var(--mono); font-size: .74rem; color: var(--g); flex: none; }
-.acard-stats { padding: 8px 13px 13px; display: flex; flex-direction: column; gap: 4px; border-top: 2px solid var(--line); }
-.acard-stat { font-family: var(--mono); font-size: .8rem; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; }
+.acard-nm { font-family: var(--pixel); font-weight: 600; font-size: .9rem; color: var(--g); line-height: 1.04; display: block; }
+.acard-sub { font-family: var(--mono); font-size: .64rem; color: var(--dim); margin-top: 3px; display: block; }
+.acard-tier { margin-left: auto; font-family: var(--mono); font-size: .7rem; color: var(--g); flex: none; }
+.acard-stats { padding: 7px 11px 11px; display: flex; flex-direction: column; gap: 3px; border-top: 2px solid var(--line); }
+.acard-stat { font-family: var(--mono); font-size: .74rem; color: var(--faint); display: flex; justify-content: space-between; gap: 9px; }
 .acard-stat .v { text-align: right; color: var(--ink); }
 .acard-stat.hit { color: var(--ink); }
 .acard-stat.hit .v { color: var(--g); font-weight: 600; }
