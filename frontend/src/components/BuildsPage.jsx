@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fmt } from "../format.js";
 import { gradeOf, gearPt } from "../grades.js";
 
+/* número cheio (sem K/M), com separador de milhar pt-BR — p/ os dados da build */
+const intfmt = (n) => Math.round(n || 0).toLocaleString("pt-BR");
+
 /* rótulos curtos de stat (p/ filtro de buff + nomes) */
 const STAT_PT = {
   AttackDamage: "Dano", AttackSpeed: "Vel. ataque", CastSpeed: "Vel. cast",
@@ -215,12 +218,12 @@ function Editor({ build, catalog, ownedSet, onBack }) {
           <div className="kpis2">
             <div className="kpi2 dps">
               <div className="k-lbl">DPS efetivo</div>
-              <div className="k-val">{fmt(cur.dps)}</div>
+              <div className="k-val">{intfmt(cur.dps)}</div>
               <div className="k-delta">{dDps ? <Delta v={dDps} unit="dps" /> : null}</div>
             </div>
             <div className="kpi2 ehp">
               <div className="k-lbl">EHP</div>
-              <div className="k-val">{fmt(cur.ehp)}</div>
+              <div className="k-val">{intfmt(cur.ehp)}</div>
               <div className="k-delta">{dEhp ? <Delta v={dEhp} unit="ehp" /> : null}</div>
             </div>
           </div>
@@ -243,7 +246,7 @@ function Editor({ build, catalog, ownedSet, onBack }) {
 }
 
 function Delta({ v, unit }) {
-  return <span className={v > 0 ? "b-up" : "b-down"}>{v > 0 ? "+" : ""}{fmt(v)} {unit}</span>;
+  return <span className={v > 0 ? "b-up" : "b-down"}>{v > 0 ? "+" : ""}{intfmt(v)} {unit}</span>;
 }
 
 /* ---------- tooltips (hover): cada stat numa linha, com valor + unidade ---------- */
@@ -347,17 +350,17 @@ function SlotTip({ s }) {
 function StatList({ stats }) {
   const s = stats || {};
   const rows = [
-    ["HP", fmt(s.MaxHp || 0)],
-    ["Ataque", fmt(s.AttackDamage || 0)],
+    ["HP", intfmt(s.MaxHp)],
+    ["Ataque", intfmt(s.AttackDamage)],
     ["Vel. ataque", ((s.AttackSpeed || 0) / 100).toFixed(2) + "/s"],
     ["Crítico", ((s.CriticalChance || 0) / 10).toFixed(1) + "%"],
     ["Dano crít.", ((s.CriticalDamage || 0) / 10).toFixed(0) + "%"],
-    ["Armadura", fmt(s.Armor || 0)],
+    ["Armadura", intfmt(s.Armor)],
     s.DamageReduction ? ["Redução", ((s.DamageReduction || 0) / 10).toFixed(1) + "%"] : null,
     s.DamageAbsorption ? ["Absorção", ((s.DamageAbsorption || 0) / 10).toFixed(1)] : null,
     s.BlockChance ? ["Block", ((s.BlockChance || 0) / 10).toFixed(1) + "%"] : null,
     s.ChaosResistance ? ["Resist. caos", (s.ChaosResistance || 0).toFixed(0) + "%"] : null,
-    s.MovementSpeed ? ["Vel. mov.", fmt(s.MovementSpeed || 0)] : null,
+    s.MovementSpeed ? ["Vel. mov.", intfmt(s.MovementSpeed)] : null,
   ].filter(Boolean);
   return (
     <div className="statlist">
