@@ -1,7 +1,9 @@
 import React, { useMemo } from "react";
 import { fmt, fmtDur } from "../format.js";
+import { useT } from "../i18n.jsx";
 
 export default function BoxPanel({ farm, rates }) {
+  const t = useT();
   const bonus = farm.dropBonus || { normal: 0, boss: 0 };
   const chests = rates?.chests_per_hour || {};
 
@@ -20,23 +22,23 @@ export default function BoxPanel({ farm, rates }) {
 
   return (
     <section className="sec">
-      <h2>Baús — rota de drop</h2>
+      <h2>{t("Chests — drop route", "Baús — rota de drop")}</h2>
 
       <div className="box-measured">
         <div className="bm">
-          <i>bônus chance · normal</i>
+          <i>{t("chance bonus · normal", "bônus chance · normal")}</i>
           <b className="v-gold">+{bonus.normal}%</b>
         </div>
         <div className="bm">
-          <i>bônus chance · boss</i>
+          <i>{t("chance bonus · boss", "bônus chance · boss")}</i>
           <b className="v-gold">+{bonus.boss}%</b>
         </div>
         <div className="bm">
-          <i>baús normais/h (medido)</i>
+          <i>{t("normal chests/h (measured)", "baús normais/h (medido)")}</i>
           <b>{chests.normal != null ? chests.normal.toFixed(1) : "—"}</b>
         </div>
         <div className="bm">
-          <i>baús de boss/h (medido)</i>
+          <i>{t("boss chests/h (measured)", "baús de boss/h (medido)")}</i>
           <b>{chests.boss != null ? chests.boss.toFixed(1) : "—"}</b>
         </div>
       </div>
@@ -44,11 +46,11 @@ export default function BoxPanel({ farm, rates }) {
       <table className="mini wide" style={{ marginTop: 10 }}>
         <thead>
           <tr>
-            <th>fase</th>
-            <th>clear</th>
-            <th>bau do boss (azul)</th>
-            <th>chance/run</th>
-            <th>bau normal</th>
+            <th>{t("stage", "fase")}</th>
+            <th>{t("clear", "clear")}</th>
+            <th>{t("boss chest (blue)", "bau do boss (azul)")}</th>
+            <th>{t("chance/run", "chance/run")}</th>
+            <th>{t("normal chest", "bau normal")}</th>
           </tr>
         </thead>
         <tbody>

@@ -1,4 +1,5 @@
 import { gearPt } from "./grades.js";
+import { tr } from "./i18n.jsx";
 
 /* Rótulos e formatação de stats/gems compartilhados entre Builds e Atributos. */
 
@@ -27,7 +28,29 @@ export const STAT_PT = {
   Multistrike: "Multigolpe", ProjectileCount: "Qtd. projéteis",
   SkillDurationIncrease: "Duração skill", SkillRangeExpansion: "Alcance skill",
 };
-export const statPt = (s) => STAT_PT[s] || s;
+/* rótulos curtos em inglês (espelho do STAT_PT) p/ o idioma EN */
+export const STAT_EN_SHORT = {
+  AttackDamage: "Damage", AttackSpeed: "Atk Speed", CastSpeed: "Cast Speed",
+  CriticalChance: "Crit", CriticalDamage: "Crit Dmg", CooldownReduction: "Cooldown",
+  MaxHp: "HP", Armor: "Armor", MovementSpeed: "Move", BlockChance: "Block",
+  DodgeChance: "Dodge", ElementalDodgeChance: "Elem Dodge",
+  HpRegenPerSec: "Regen", AddHpPerHit: "HP/hit", HpLeech: "Leech",
+  SkillHealIncrease: "Heal", DamageAbsorption: "Absorb", DamageReduction: "Reduction",
+  ChaosResistance: "Chaos Res", FireResistance: "Fire Res",
+  ColdResistance: "Cold Res", LightningResistance: "Light Res",
+  PhysicalResistance: "Phys Res", AllElementalResistance: "Elem Res",
+  PhysicalDamagePercent: "Phys Dmg", FireDamagePercent: "Fire Dmg",
+  ColdDamagePercent: "Cold Dmg", LightningDamagePercent: "Light Dmg",
+  ChaosDamagePercent: "Chaos Dmg", AreaOfEffect: "Area",
+  AddAllSkillLevel: "Skill Lvl", AddHpPerKill: "HP/kill",
+  BaseAttackCountReduction: "Atk Req −", IncreaseAreaOfEffectDamage: "AoE Dmg",
+  IncreaseExpAmount: "EXP", IncreaseMeleeDamage: "Melee Dmg",
+  IncreaseProjectileDamage: "Proj Dmg", IncreaseSummonDamage: "Summon Dmg",
+  Multistrike: "Multistrike", ProjectileCount: "Proj Count",
+  SkillDurationIncrease: "Skill Dur", SkillRangeExpansion: "Skill Range",
+};
+/* statPt: nome do idioma atual (EN padrão / PT) — sem precisar de hook */
+export const statPt = (s) => tr(STAT_EN_SHORT[s] || s, STAT_PT[s] || s);
 
 export const SLOT_PT = {
   BOW: "Arco", ARROW: "Flecha", SWORD: "Espada", AXE: "Machado", STAFF: "Cajado",
@@ -36,7 +59,14 @@ export const SLOT_PT = {
   HELMET: "Elmo", ARMOR: "Armadura", GLOVES: "Luvas", BOOTS: "Botas",
   AMULET: "Amuleto", EARING: "Brinco", RING: "Anel", BRACER: "Bracelete",
 };
-export const slotPt = (s) => SLOT_PT[s] || gearPt(s) || s;
+export const SLOT_EN = {
+  BOW: "Bow", ARROW: "Arrow", SWORD: "Sword", AXE: "Axe", STAFF: "Staff",
+  SCEPTER: "Scepter", ORB: "Orb", SHIELD: "Shield", TOME: "Tome", BOLT: "Bolt",
+  CROSSBOW: "Crossbow", HATCHET: "Hatchet",
+  HELMET: "Helmet", ARMOR: "Armor", GLOVES: "Gloves", BOOTS: "Boots",
+  AMULET: "Amulet", EARING: "Earring", RING: "Ring", BRACER: "Bracer",
+};
+export const slotPt = (s) => tr(SLOT_EN[s] || s, SLOT_PT[s] || gearPt(s) || s);
 
 export const CAT_OF = {
   BOW: "WEAPON", ARROW: "WEAPON", SWORD: "WEAPON", AXE: "WEAPON", STAFF: "WEAPON",
@@ -46,7 +76,7 @@ export const CAT_OF = {
   AMULET: "ACCESSORY", EARING: "ACCESSORY", RING: "ACCESSORY", BRACER: "ACCESSORY",
 };
 export const catOf = (gt) => CAT_OF[gt] || "WEAPON";
-export const catPt = (c) => (c === "WEAPON" ? "arma" : c === "ARMOR" ? "armadura" : "acessório");
+export const catPt = (c) => (c === "WEAPON" ? tr("weapon", "arma") : c === "ARMOR" ? tr("armor", "armadura") : tr("accessory", "acessório"));
 
 const STAT_EN = {
   AttackDamage: "Attack Damage", AttackSpeed: "Attack Speed", CastSpeed: "Cast Speed",

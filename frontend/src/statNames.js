@@ -1,4 +1,5 @@
 import { fmt } from "./format.js";
+import { tr } from "./i18n.jsx";
 
 // nomes amigáveis + unidade certa de cada stat (escala /1000 ou /100 do jogo)
 const sign = (d) => (d > 0 ? "+" : "−");
@@ -24,9 +25,13 @@ const ELEM_PT = {
   Fire: "fogo", Cold: "gelo", Lightning: "raio",
   Chaos: "caos", Physical: "físico",
 };
+const ELEM_EN = {
+  Fire: "fire", Cold: "cold", Lightning: "lightning",
+  Chaos: "chaos", Physical: "physical",
+};
 
 export function elemPt(el) {
-  return ELEM_PT[el] || el;
+  return tr(ELEM_EN[el] || el, ELEM_PT[el] || el);
 }
 
 // efeito de runa em pt (valores per-mille viram %, flats ficam crus)

@@ -1,7 +1,9 @@
 import React from "react";
 import { fmt } from "../format.js";
+import { useT } from "../i18n.jsx";
 
 export default function ModelTab({ sim, manualSamples }) {
+  const t = useT();
   const cal = sim.calibration;
   const rowByKey = {};
   for (const r of sim.farm.rows || []) rowByKey[r.key] = r;
@@ -56,8 +58,8 @@ export default function ModelTab({ sim, manualSamples }) {
   return (
     <div className="model-grid">
       <section className="sec">
-        <h2>Calibração</h2>
-        <p className="muted small">Insira seu tempo de run e digite o tempo abaixo:</p>
+        <h2>{t("Calibration", "Calibração")}</h2>
+        <p className="muted small">{t("Enter your run time and type the time below:", "Insira seu tempo de run e digite o tempo abaixo:")}</p>
         {calRow ? (
           <div className="cal-form">
             <div className="cal-row">
@@ -69,50 +71,49 @@ export default function ModelTab({ sim, manualSamples }) {
                 {calOptions.map((r) => (
                   <option key={r.key} value={r.key}>
                     {r.tag} {r.label} — {r.name}
-                    {r.current ? " (fase atual)" : ""}
+                    {r.current ? t(" (current stage)", " (fase atual)") : ""}
                   </option>
                 ))}
               </select>
             </div>
             <div className="cal-stage muted small">
               {calKey == null
-                ? "seguindo a fase atual"
-                : "fase escolhida à mão (não muda quando você troca de mapa)"}
+                ? t("following the current stage", "seguindo a fase atual")
+                : t("manually chosen stage (does not change when you switch maps)", "fase escolhida à mão (não muda quando você troca de mapa)")}
               {calRow.clearTime != null &&
-                ` · previsto agora ${Math.round(calRow.clearTime)}s`}
+                t(` · predicted now ${Math.round(calRow.clearTime)}s`, ` · previsto agora ${Math.round(calRow.clearTime)}s`)}
             </div>
             <div className="cal-row">
               <input
-                type="number" min="1" step="1" placeholder="segundos"
+                type="number" min="1" step="1" placeholder={t("seconds", "segundos")}
                 value={secs}
                 onChange={(e) => setSecs(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && saveCal(calRow.key)}
               />
               <span className="muted">s</span>
               <button onClick={() => saveCal(calRow.key)} disabled={!secs}>
-                Salvar
+                {t("Save", "Salvar")}
               </button>
             </div>
           </div>
         ) : (
-          <p className="muted small">aguardando o save pra saber a fase atual…</p>
+          <p className="muted small">{t("waiting for the save to know the current stage…", "aguardando o save pra saber a fase atual…")}</p>
         )}
       </section>
 
       <section className="sec">
-        <h2>Previsto × medido (suas calibrações)</h2>
+        <h2>{t("Predicted × measured (your calibrations)", "Previsto × medido (suas calibrações)")}</h2>
         {comparison.length === 0 ? (
           <p className="muted small">
-            Nenhuma calibração ainda. Cronometre uma run no card acima — o
-            modelo extrapola dela pra todas as fases.
+            {t("No calibration yet. Time a run in the card above — the model extrapolates from it to all stages.", "Nenhuma calibração ainda. Cronometre uma run no card acima — o modelo extrapola dela pra todas as fases.")}
           </p>
         ) : (
           <>
             <table className="mini wide">
               <thead>
                 <tr>
-                  <th>estágio</th><th>cronometrado</th><th>dps na época</th>
-                  <th>previsto hoje{dpsNow ? ` (dps ${fmt(dpsNow)})` : ""}</th>
+                  <th>{t("stage", "estágio")}</th><th>{t("timed", "cronometrado")}</th><th>{t("dps then", "dps na época")}</th>
+                  <th>{t("predicted today", "previsto hoje")}{dpsNow ? ` (dps ${fmt(dpsNow)})` : ""}</th>
                   <th>Δ</th><th></th>
                 </tr>
               </thead>
@@ -128,7 +129,7 @@ export default function ModelTab({ sim, manualSamples }) {
                     </td>
                     <td>
                       <button className="link" onClick={() => removeCal(c.key)}>
-                        remover
+                        {t("remove", "remover")}
                       </button>
                     </td>
                   </tr>
@@ -142,40 +143,38 @@ export default function ModelTab({ sim, manualSamples }) {
                 onClick={() => setShowAll((s) => !s)}
               >
                 {showAll
-                  ? "ver menos"
-                  : `ver mais (+${comparison.length - 10})`}
+                  ? t("show less", "ver menos")
+                  : t(`show more (+${comparison.length - 10})`, `ver mais (+${comparison.length - 10})`)}
               </button>
             )}
             <p className="muted small" style={{ marginTop: 8 }}>
-              O previsto usa seu DPS <b>atual</b> — se o time ficou mais forte
-              desde a calibração, é normal o previsto ser menor que o tempo
-              cronometrado na época. Recalibre de vez em quando pra acompanhar.
+              {t("The prediction uses your ", "O previsto usa seu DPS ")}<b>{t("current", "atual")}</b>{t(" DPS — if the team got stronger since the calibration, it's normal for the prediction to be lower than the time recorded back then. Recalibrate now and then to keep up.", " — se o time ficou mais forte desde a calibração, é normal o previsto ser menor que o tempo cronometrado na época. Recalibre de vez em quando pra acompanhar.")}
             </p>
           </>
         )}
       </section>
 
       <section className="sec">
-        <h2>Estado da calibração</h2>
+        <h2>{t("Calibration state", "Estado da calibração")}</h2>
         <div className="model-stats">
           <div className="kv-big">
-            <i>fonte ativa</i>
+            <i>{t("active source", "fonte ativa")}</i>
             <b>{cal.source}</b>
           </div>
           <div className="kv-big">
-            <i>calibrações</i>
+            <i>{t("calibrations", "calibrações")}</i>
             <b>{(manualSamples || []).length}</b>
           </div>
           <div className="kv-big">
-            <i>overhead por wave</i>
+            <i>{t("overhead per wave", "overhead por wave")}</i>
             <b>{cal.tWave != null ? cal.tWave + "s" : "—"}</b>
           </div>
           <div className="kv-big">
-            <i>velocidade de kill</i>
+            <i>{t("kill speed", "velocidade de kill")}</i>
             <b>{killRate ? fmt(killRate) + " HP/s" : "—"}</b>
           </div>
           <div className="kv-big">
-            <i>fator (kill ÷ DPS teórico)</i>
+            <i>{t("factor (kill ÷ theoretical DPS)", "fator (kill ÷ DPS teórico)")}</i>
             <b>{cal.factor ?? "—"}</b>
           </div>
         </div>

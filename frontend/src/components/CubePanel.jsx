@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { fmt } from "../format.js";
 import { gradeOf, gearPt } from "../grades.js";
+import { useT } from "../i18n.jsx";
 
 const typeLabel = (e) =>
   e.type === "GEAR" ? gearPt(e.gear) || e.gear : e.type === "MATERIAL" ? "Material" : e.type;
@@ -46,6 +47,7 @@ function Cell({ e, selected, onClick }) {
 }
 
 function PreviewBar({ e, cube }) {
+  const t = useT();
   const need = cube?.need;
   if (!e.ok || !need) return null;
   const exp = cube.exp;
@@ -67,7 +69,7 @@ function PreviewBar({ e, cube }) {
   const toLevel = gained === 0 ? Math.max(1, Math.ceil((need - exp) / eff)) : null;
   return (
     <div className="cube-preview">
-      <div className="cube-prev-head">cubo depois da Alquimia deste item</div>
+      <div className="cube-prev-head">{t("cube after Alchemizing this item", "cubo depois da Alquimia deste item")}</div>
       <div className="cube-prev-bar">
         <span className="seg-cur" style={{ width: curPct + "%" }} />
         <span className="seg-add" style={{ width: addPct + "%" }} />
@@ -78,7 +80,7 @@ function PreviewBar({ e, cube }) {
             <b className="v-exp">
               Lv {cube.level} → Lv {cube.level + gained}
             </b>{" "}
-            <span className="muted">(sobra {fmt(Math.round(rem))} EXP)</span>
+            <span className="muted">({t("leftover", "sobra")} {fmt(Math.round(rem))} EXP)</span>
           </>
         ) : (
           <>
@@ -90,7 +92,7 @@ function PreviewBar({ e, cube }) {
       </div>
       {toLevel != null && (
         <div className="cube-prev-sub muted small">
-          faltam ~<b>{fmt(toLevel)}</b> deste item pra subir 1 nível
+          {t("need ~", "faltam ~")}<b>{fmt(toLevel)}</b>{t(" of this item to go up 1 level", " deste item pra subir 1 nível")}
         </div>
       )}
     </div>
@@ -98,10 +100,11 @@ function PreviewBar({ e, cube }) {
 }
 
 function Detail({ e, cube, mult, top, onPick }) {
+  const t = useT();
   if (!e)
     return (
       <div className="cube-detail empty">
-        <div className="cube-prev-head">Melhores itens para alquimia no nível do cubo atual</div>
+        <div className="cube-prev-head">{t("Best items for alchemy at the current cube level", "Melhores itens para alquimia no nível do cubo atual")}</div>
         <div className="cube-top-list">
           {(top || []).map((it) => {
             const tg = gradeOf(it.grade);
@@ -120,7 +123,7 @@ function Detail({ e, cube, mult, top, onPick }) {
             );
           })}
           {(!top || top.length === 0) && (
-            <p className="muted small">Nenhum item alquimizável.</p>
+            <p className="muted small">{t("No alchemizable item.", "Nenhum item alquimizável.")}</p>
           )}
         </div>
       </div>
@@ -151,16 +154,16 @@ function Detail({ e, cube, mult, top, onPick }) {
         <>
           <div className="cube-eff">
             <span className="cube-eff-num">{fmt(e.eff)}</span>
-            <span className="muted small">EXP de cubo</span>
+            <span className="muted small">{t("cube EXP", "EXP de cubo")}</span>
           </div>
           <div className="cube-rows">
             <div className="cube-row">
-              <i>EXP base</i>
+              <i>{t("base EXP", "EXP base")}</i>
               <b>{fmt(e.base)}</b>
             </div>
             {e.match != null && (
               <div className="cube-row">
-                <i>level matching (item Lv{e.level} × cubo Lv{cube?.level})</i>
+                <i>{t(`level matching (item Lv${e.level} × cube Lv${cube?.level})`, `level matching (item Lv${e.level} × cubo Lv${cube?.level})`)}</i>
                 <b
                   className={
                     e.match < 0.5 ? "badge-red" : e.match >= 0.95 ? "badge-green" : ""
@@ -171,7 +174,7 @@ function Detail({ e, cube, mult, top, onPick }) {
               </div>
             )}
             <div className="cube-row">
-              <i>seu buff</i>
+              <i>{t("your buff", "seu buff")}</i>
               <b className="v-exp">×{mult.toFixed(2)}</b>
             </div>
           </div>
@@ -180,10 +183,10 @@ function Detail({ e, cube, mult, top, onPick }) {
       ) : (
         <p className="muted small" style={{ marginTop: 12 }}>
           {e.equipped
-            ? "Equipado — não entra na Alquimia."
+            ? t("Equipped — not used in Alchemy.", "Equipado — não entra na Alquimia.")
             : e.blocked
-            ? "Bloqueado — não entra na Alquimia."
-            : "Sem valor de cubo."}
+            ? t("Blocked — not used in Alchemy.", "Bloqueado — não entra na Alquimia.")
+            : t("No cube value.", "Sem valor de cubo.")}
         </p>
       )}
     </div>
@@ -191,6 +194,7 @@ function Detail({ e, cube, mult, top, onPick }) {
 }
 
 export default function CubePanel({ alchemy }) {
+  const t = useT();
   const [cid, setCid] = useState("stash");
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState(null);
@@ -225,8 +229,7 @@ export default function CubePanel({ alchemy }) {
     return (
       <main className="page no-rail">
         <div className="loading">
-          sem dados do cubo ainda — rode <code>python fetch_gamedata.py --force</code> e
-          reabra o painel.
+          {t("no cube data yet — run", "sem dados do cubo ainda — rode")} <code>python fetch_gamedata.py --force</code> {t("and reopen the panel.", "e reabra o painel.")}
         </div>
       </main>
     );
@@ -243,16 +246,16 @@ export default function CubePanel({ alchemy }) {
       {/* header do cubo (largura total) */}
       <div className="cube-head">
           <div className="cube-badge">
-            <span className="cube-badge-k">Cubo</span>
+            <span className="cube-badge-k">{t("Cube", "Cubo")}</span>
             <span className="cube-badge-lv">Lv {cube.level}</span>
           </div>
           <div className="cube-prog">
             <div className="cube-prog-top">
               <span>
-                {fmt(cube.exp)} / {cube.maxed ? "máx" : fmt(cube.need)} EXP
+                {fmt(cube.exp)} / {cube.maxed ? t("max", "máx") : fmt(cube.need)} EXP
               </span>
               <span className="muted">
-                {cube.maxed ? "nível máximo" : `${cube.pctToNext}% do próximo`}
+                {cube.maxed ? t("max level", "nível máximo") : t(`${cube.pctToNext}% to next`, `${cube.pctToNext}% do próximo`)}
               </span>
             </div>
             <div className="cube-bar">
@@ -261,27 +264,27 @@ export default function CubePanel({ alchemy }) {
           </div>
           <div className="cube-chips">
             <div className="cube-chip">
-              <i>buff de EXP</i>
+              <i>{t("EXP buff", "buff de EXP")}</i>
               <b className="v-exp">+{alchemy.buff.pct}%</b>
             </div>
             <div className="cube-chip">
-              <i>Alquimia de tudo</i>
+              <i>{t("Alchemize everything", "Alquimia de tudo")}</i>
               <b>
                 Lv {cube.level} → <span className="v-exp">Lv {proj.level}</span>
                 {proj.gained > 0 && ` (+${proj.gained})`}
               </b>
             </div>
             <div className="cube-chip">
-              <i>EXP no inventário+stash</i>
+              <i>{t("EXP in inventory+stash", "EXP no inventário+stash")}</i>
               <b>{fmt(alchemy.sumAll)}</b>
             </div>
             {cube.recoLevel != null && (
               <div className="cube-chip cube-chip-reco">
-                <i>nível de equip. recomendado p/ alquimia</i>
+                <i>{t("recommended gear level for alchemy", "nível de equip. recomendado p/ alquimia")}</i>
                 <b className="cube-reco-val">
                   <span className="v-exp">Lv {cube.recoLevel}</span>
                   {cube.recoMatch != null && (
-                    <span className="reco-pct">{cube.recoMatch}% matching</span>
+                    <span className="reco-pct">{t(`${cube.recoMatch}% matching`, `${cube.recoMatch}% matching`)}</span>
                   )}
                 </b>
               </div>
@@ -318,7 +321,7 @@ export default function CubePanel({ alchemy }) {
                 setPage(0);
               }}
             >
-              ordenar por EXP
+              {t("sort by EXP", "ordenar por EXP")}
             </button>
             <button
               className={"cube-toggle" + (sort === "level" ? " on" : "")}
@@ -327,7 +330,7 @@ export default function CubePanel({ alchemy }) {
                 setPage(0);
               }}
             >
-              ordenar por level
+              {t("sort by level", "ordenar por level")}
             </button>
             <button
               className={"cube-toggle" + (onlyAlch ? " on" : "")}
@@ -336,14 +339,14 @@ export default function CubePanel({ alchemy }) {
                 setPage(0);
               }}
             >
-              só alquimizáveis
+              {t("alchemizable only", "só alquimizáveis")}
             </button>
           </div>
         </div>
 
         {cont && (
           <div className="cube-sub muted small">
-            {cont.alchCount} alquimizáveis ·{" "}
+            {cont.alchCount} {t("alchemizable", "alquimizáveis")} ·{" "}
             <span className="v-exp">{fmt(cont.sumEff)}</span> EXP → Lv {cont.project.level}
             {cont.project.gained > 0 && ` (+${cont.project.gained})`}
           </div>

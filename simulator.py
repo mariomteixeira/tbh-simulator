@@ -65,9 +65,21 @@ def _load(gd_dir: Path, name: str):
     return json.loads((gd_dir / f"{name}.json").read_text(encoding="utf-8-sig"))
 
 
-def _name(i18n, lang="pt-BR"):
+# idioma dos nomes do datamine (padrão: inglês). set_lang() troca em runtime;
+# build_catalog/simulate chamam _name sem lang, então pegam este global.
+_LANG = "en-US"
+
+
+def set_lang(lang):
+    """Define o idioma dos nomes ('en'/'pt' ou código completo 'en-US'/'pt-BR')."""
+    global _LANG
+    _LANG = {"pt": "pt-BR", "en": "en-US"}.get(lang, lang or "en-US")
+
+
+def _name(i18n, lang=None):
     if not i18n:
         return None
+    lang = lang or _LANG
     return i18n.get(lang) or i18n.get("en-US") or next(iter(i18n.values()), None)
 
 
@@ -196,8 +208,9 @@ class GameData:
     # -- economia de um estagio --------------------------------------------
     def stage_econ(self, key: int):
         """HP, gold, exp e kills totais de um clear completo do estagio."""
-        if key in self._econ_cache:
-            return self._econ_cache[key]
+        ck = (_LANG, key)   # nome depende do idioma -> cache por (lang, stage)
+        if ck in self._econ_cache:
+            return self._econ_cache[ck]
         s = self.stages.get(key)
         if not s:
             return None
@@ -258,7 +271,7 @@ class GameData:
             # 'elements' = tipos NÃO-físicos (compat com EHP elemental existente)
             "elements": sorted(k for k in elem_hits if k != "Physical"),
         }
-        self._econ_cache[key] = econ
+        self._econ_cache[ck] = econ
         return econ
 
 

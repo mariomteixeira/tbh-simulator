@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 import tbh_tracker as core
 from simulator import (GameData, simulate, build_catalog, whatif_hero,
-                       current_stage_ctx, rune_stats)
+                       current_stage_ctx, rune_stats, set_lang)
 from store import Store
 
 ROOT = Path(__file__).parent
@@ -221,6 +221,7 @@ class SaveWatcher:
         with self.lock:
             self.sim = sim if sim else self.sim
             self.sim_error = sim_error
+            self._sim_lang = {}   # invalida cache de nomes pt
 
     # -- amostras (so manuais) e re-simulacao sob demanda ---------------------
     def _all_samples(self):
@@ -247,13 +248,39 @@ class SaveWatcher:
                            ceiling=self.store.ceiling())
             with self.lock:
                 self.sim, self.sim_error = sim, None
+                self._sim_lang = {}
         except Exception as e:
             with self.lock:
                 self.sim_error = f"simulador falhou: {e}"
 
+    def _sim_for_lang(self, lang):
+        """Sim com os nomes do datamine no idioma pedido. 'en' usa self.sim
+        (computado no loop). 'pt' recomputa do save em cache (_inner) e cacheia."""
+        if lang != "pt":
+            return self.sim
+        cache = getattr(self, "_sim_lang", None)
+        if cache is None:
+            cache = self._sim_lang = {}
+        if "pt" in cache:
+            return cache["pt"]
+        inner = getattr(self, "_inner", None)
+        if inner is None or not self.gamedata:
+            return self.sim
+        try:
+            set_lang("pt")
+            sim = simulate(self.gamedata, inner, self._measured(),
+                           samples=self._all_samples(), ceiling=self.store.ceiling())
+            cache["pt"] = sim
+            return sim
+        except Exception:
+            return self.sim
+        finally:
+            set_lang("en")
+
     # -- snapshot para a API -------------------------------------------------
-    def snapshot(self):
+    def snapshot(self, lang="en"):
         with self.lock:
+            sim = self._sim_for_lang(lang)
             return {
                 "version": VERSION,
                 "status": {
@@ -268,7 +295,7 @@ class SaveWatcher:
                 "state": self.state,
                 "rates": self.rates,
                 "sessionRates": self.session_rates,
-                "sim": self.sim,
+                "sim": sim,
                 "history": self.store.history()[-HISTORY_MAX:],
                 "manualSamples": self.store.manual_samples(),
             }
@@ -278,8 +305,8 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
     app = FastAPI(title="TBH Copilot", docs_url=None, redoc_url=None)
 
     @app.get("/api/snapshot")
-    def api_snapshot():
-        return watcher.snapshot()
+    def api_snapshot(lang: str = "en"):
+        return watcher.snapshot("pt" if lang == "pt" else "en")
 
     @app.post("/api/calibration")
     def add_calibration(body: CalibrationIn):
@@ -311,14 +338,21 @@ def build_app(watcher: SaveWatcher) -> FastAPI:
         return {"ok": True, "removed": removed}
 
     @app.get("/api/catalog")
-    def api_catalog():
-        """Catalogo de itens equipaveis + gems (decoracao/gravacao/inscricao)
-        pra pagina de Builds. So depende do datamine — montado uma vez e cacheado."""
+    def api_catalog(lang: str = "en"):
+        """Catalogo de itens equipaveis + gems (decoracao/gravacao/inscricao).
+        So depende do datamine — montado uma vez por idioma e cacheado."""
         if not watcher.gamedata:
             return {"error": watcher.gamedata_error or "gamedata indisponivel"}
-        if watcher._catalog is None:
-            watcher._catalog = build_catalog(watcher.gamedata)
-        return watcher._catalog
+        key = "pt" if lang == "pt" else "en"
+        cache = watcher._catalog if isinstance(watcher._catalog, dict) else {}
+        if key not in cache:
+            try:
+                set_lang(key)
+                cache[key] = build_catalog(watcher.gamedata)
+            finally:
+                set_lang("en")
+            watcher._catalog = cache
+        return watcher._catalog[key]
 
     @app.post("/api/whatif")
     def api_whatif(body: WhatIfIn):

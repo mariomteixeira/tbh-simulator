@@ -1,9 +1,11 @@
 import React from "react";
 import { fmt, fmtDur } from "../format.js";
+import { useT } from "../i18n.jsx";
 
 const ROLE_CLASS = { tank: "tank", dps: "dps", healer: "heal" };
 
 export default function Heroes({ sim, state, rates }) {
+  const t = useT();
   const unspent = {};
   for (const h of state.heroes || []) unspent[h.key] = h.unspent;
   const etas = {};
@@ -12,7 +14,7 @@ export default function Heroes({ sim, state, rates }) {
 
   return (
     <section className="sec">
-      <h2>Time</h2>
+      <h2>{t("Team", "Time")}</h2>
       <div className="hero-list">
         {sim.heroes.map((h) => (
           <div className="hero" key={h.key}>
@@ -40,11 +42,11 @@ export default function Heroes({ sim, state, rates }) {
             </div>
             <div className="hero-grid">
               <span className="kv">
-                <i>dps status</i>
+                <i>{t("status dps", "dps status")}</i>
                 <b>{fmt(h.statusDps)}</b>
               </span>
               <span className="kv">
-                <i>dps efetivo</i>
+                <i>{t("effective dps", "dps efetivo")}</i>
                 <b>{fmt(h.dps)}</b>
               </span>
               <span className="kv">
@@ -59,11 +61,11 @@ export default function Heroes({ sim, state, rates }) {
             <div className="hero-foot">
               {etas[h.key]?.etaSec != null && (
                 <span className="muted">
-                  próx. nível em ~{fmtDur(etas[h.key].etaSec)}
+                  {t("next level in ~", "próx. nível em ~")}{fmtDur(etas[h.key].etaSec)}
                 </span>
               )}
               {unspent[h.key] > 0 && (
-                <span className="badge-green">{unspent[h.key]} ponto(s) livre</span>
+                <span className="badge-green">{unspent[h.key]} {t("free point(s)", "ponto(s) livre")}</span>
               )}
             </div>
           </div>

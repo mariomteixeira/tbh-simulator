@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { fmt, fmtDur } from "../format.js";
+import { useT, ratingLabel } from "../i18n.jsx";
 
 const DIFFS = ["todas", "N", "NM", "H", "T"];
 // controles de ordenação (substituem os <th> clicáveis da tabela antiga)
@@ -12,6 +13,7 @@ const SORTS = [
 ];
 
 export default function FarmTable({ farm }) {
+  const t = useT();
   const [sort, setSort] = useState({ key: "goldPerHour", dir: -1 });
   const [diff, setDiff] = useState("todas");
   const [all, setAll] = useState(false);
@@ -54,7 +56,7 @@ export default function FarmTable({ farm }) {
   return (
     <section className="sec">
       <div className="sec-head">
-        <h2>Farm — taxas reais por estágio</h2>
+        <h2>{t("Farm — real rates per stage", "Farm — taxas reais por estágio")}</h2>
         <div className="row-chips">
           {DIFFS.map((dd) => (
             <button
@@ -62,7 +64,7 @@ export default function FarmTable({ farm }) {
               className={"chip" + (diff === dd ? " on" : "")}
               onClick={() => setDiff(dd)}
             >
-              {dd}
+              {dd === "todas" ? t("all", "todas") : dd}
             </button>
           ))}
           {SORTS.map((c) => (
@@ -71,12 +73,12 @@ export default function FarmTable({ farm }) {
               className={"chip" + (sort.key === c.key ? " on" : "")}
               onClick={() => clickSort(c.key)}
             >
-              {c.label}
+              {c.label === "estágio" ? t("stage", "estágio") : c.label}
               {arrow(c.key)}
             </button>
           ))}
           <button className="chip" onClick={() => setAll(!all)}>
-            {all ? "ver top" : "ver todas"}
+            {all ? t("see top", "ver top") : t("see all", "ver todas")}
           </button>
         </div>
       </div>
@@ -94,12 +96,12 @@ export default function FarmTable({ farm }) {
                 <span className={"diff " + r.tag}>{r.tag}</span>
                 <span className="id">{r.label}</span>
                 <span className="dim">{r.name}</span>
-                {r.current && <span className="badge cur">atual</span>}
-                {isBestGold && <span className="badge gold">★ melhor gold</span>}
-                {isBestExp && <span className="badge exp">★ melhor exp</span>}
+                {r.current && <span className="badge cur">{t("current", "atual")}</span>}
+                {isBestGold && <span className="badge gold">{t("★ best gold", "★ melhor gold")}</span>}
+                {isBestExp && <span className="badge exp">{t("★ best exp", "★ melhor exp")}</span>}
                 {isPush && <span className="badge push">push</span>}
                 {r.beyondCeiling && (
-                  <span className="badge push">acima do teto</span>
+                  <span className="badge push">{t("above ceiling", "acima do teto")}</span>
                 )}
                 {r.type === "ACTBOSS" && <span className="badge cur">boss</span>}
               </div>
@@ -117,8 +119,8 @@ export default function FarmTable({ farm }) {
                   <span className="num">{fmt(r.expPerHour)}</span>
                 </div>
                 <div className="m">
-                  <span className="lbl">perigo</span>
-                  <span className={"rating " + r.rating}>{r.rating}</span>
+                  <span className="lbl">{t("danger", "perigo")}</span>
+                  <span className={"rating " + r.rating}>{ratingLabel(r.rating)}</span>
                 </div>
               </div>
             </div>

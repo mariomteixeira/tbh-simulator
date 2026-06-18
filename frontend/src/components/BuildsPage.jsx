@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useT, useLang } from "../i18n.jsx";
 import { fmt } from "../format.js";
 import { gradeOf } from "../grades.js";
 import {
@@ -34,6 +35,7 @@ function RoleTag({ role }) {
 
 /* ---------------- roster ---------------- */
 function Roster({ builds, onPick }) {
+  const t = useT();
   // só heróis em uso: em campo OU com nível investido (esconde os Lv1 intocados)
   const list = useMemo(
     () => builds
@@ -44,7 +46,7 @@ function Roster({ builds, onPick }) {
   );
   return (
     <main className="page builds-page no-rail">
-      <h1>Builds</h1>
+      <h1>{t("Builds", "Builds")}</h1>
       <div className="roster">
         {list.map((h) => (
           <div
@@ -61,7 +63,7 @@ function Roster({ builds, onPick }) {
                 <span className="bcard-sub"><RoleTag role={h.role} /></span>
               </div>
               <span className={"bcard-lv" + (h.fielded ? "" : " bench")}>
-                {h.level != null ? "Lv " + h.level : "reserva"}
+                {h.level != null ? "Lv " + h.level : t("bench", "reserva")}
               </span>
             </div>
             <div className="bcard-stats">
@@ -71,8 +73,8 @@ function Roster({ builds, onPick }) {
               <div className="bstat"><i>Crit</i><b>{((h.stats?.CriticalChance || 0) / 10).toFixed(1)}%</b></div>
             </div>
             <div className="bcard-foot">
-              <span>{h.fielded ? "em campo" : "reserva"}</span>
-              <span className="bcard-cta">{h.fielded ? "editar build ▸" : "ver build ▸"}</span>
+              <span>{h.fielded ? t("in field", "em campo") : t("bench", "reserva")}</span>
+              <span className="bcard-cta">{h.fielded ? t("edit build ▸", "editar build ▸") : t("view build ▸", "ver build ▸")}</span>
             </div>
           </div>
         ))}
@@ -91,6 +93,7 @@ const GROUPS = [
 const DOLL_COL = { WEAPON: [1, 2], ARMOR: [1, 2], ACCESSORY: [4, 5] };
 
 function Editor({ build, catalog, ownedSet, onBack }) {
+  const t = useT();
   const [work, setWork] = useState(() =>
     build.loadout.filter((s) => s.itemKey).map((s) => ({ ...s, sockets: s.sockets.map((k) => ({ ...k })) }))
   );
@@ -165,7 +168,7 @@ function Editor({ build, catalog, ownedSet, onBack }) {
   return (
     <main className="page builds-page no-rail">
       <div className="builds-crumb">
-        <button className="link-back" onClick={onBack}>‹ Equipe</button>
+        <button className="link-back" onClick={onBack}>{t("‹ Team", "‹ Equipe")}</button>
         <span className="bc-sep">/</span>
         <span className="bc-here">{build.name}</span>
       </div>
@@ -182,7 +185,7 @@ function Editor({ build, catalog, ownedSet, onBack }) {
           <SelSock slot={slot} cap={cap} onRemove={removeSock} />
           <div className="kpis2">
             <div className="kpi2 dps">
-              <div className="k-lbl">DPS efetivo</div>
+              <div className="k-lbl">{t("Effective DPS", "DPS efetivo")}</div>
               <div className="k-val">{intfmt(cur.dps)}</div>
               <div className="k-delta">{dDps ? <Delta v={dDps} unit="dps" /> : null}</div>
             </div>
@@ -194,9 +197,9 @@ function Editor({ build, catalog, ownedSet, onBack }) {
           </div>
           <StatList stats={cur.stats} />
           <div className="card-actions">
-            <button className="b-btn" onClick={reset}>resetar</button>
-            <button className="b-btn ghost" onClick={onBack}>voltar para equipe</button>
-            {busy && <span className="b-busy">recalculando…</span>}
+            <button className="b-btn" onClick={reset}>{t("reset", "resetar")}</button>
+            <button className="b-btn ghost" onClick={onBack}>{t("back to team", "voltar para equipe")}</button>
+            {busy && <span className="b-busy">{t("recalculating…", "recalculando…")}</span>}
           </div>
         </aside>
       </div>
@@ -231,6 +234,7 @@ function ItemTip({ r }) {
   );
 }
 function GemTip({ r }) {
+  const t = useT();
   const g = gradeOf(r.grade);
   const opts = r.opts || [];
   const many = opts.length > 5;
@@ -240,7 +244,7 @@ function GemTip({ r }) {
       <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
       {opts.length > 1 && (
         <div className="tip-row">
-          <i>{opts.length} opções{chance && chance < 100 ? ` · ${Math.round(chance)}% cada` : ""}</i>
+          <i>{opts.length} {t("options", "opções")}{chance && chance < 100 ? ` · ${Math.round(chance)}% ${t("each", "cada")}` : ""}</i>
           <span>{tierLabel(opts[0].tier)}</span>
         </div>
       )}
@@ -248,7 +252,7 @@ function GemTip({ r }) {
         {(many ? opts.slice(0, 6) : opts).map((e, i) => (
           <div className="tip-stat" key={i}>{statRange(e.stat, e.mod, e.min, e.max)}{opts.length === 1 ? ` · ${tierLabel(e.tier)}` : ""}</div>
         ))}
-        {many && <div className="tip-stat muted">+{opts.length - 6} outras…</div>}
+        {many && <div className="tip-stat muted">+{opts.length - 6} {t("others…", "outras…")}</div>}
       </div>
     </>
   );
@@ -274,19 +278,20 @@ function SlotTip({ s }) {
 }
 
 function StatList({ stats }) {
+  const t = useT();
   const s = stats || {};
   const rows = [
     ["HP", intfmt(s.MaxHp)],
-    ["Ataque", intfmt(s.AttackDamage)],
-    ["Vel. ataque", ((s.AttackSpeed || 0) / 100).toFixed(2) + "/s"],
-    ["Crítico", ((s.CriticalChance || 0) / 10).toFixed(1) + "%"],
-    ["Dano crít.", ((s.CriticalDamage || 0) / 10).toFixed(0) + "%"],
-    ["Armadura", intfmt(s.Armor)],
-    s.DamageReduction ? ["Redução", ((s.DamageReduction || 0) / 10).toFixed(1) + "%"] : null,
-    s.DamageAbsorption ? ["Absorção", ((s.DamageAbsorption || 0) / 10).toFixed(1)] : null,
+    [t("Attack", "Ataque"), intfmt(s.AttackDamage)],
+    [t("Atk. speed", "Vel. ataque"), ((s.AttackSpeed || 0) / 100).toFixed(2) + "/s"],
+    [t("Critical", "Crítico"), ((s.CriticalChance || 0) / 10).toFixed(1) + "%"],
+    [t("Crit. dmg.", "Dano crít."), ((s.CriticalDamage || 0) / 10).toFixed(0) + "%"],
+    [t("Armor", "Armadura"), intfmt(s.Armor)],
+    s.DamageReduction ? [t("Reduction", "Redução"), ((s.DamageReduction || 0) / 10).toFixed(1) + "%"] : null,
+    s.DamageAbsorption ? [t("Absorption", "Absorção"), ((s.DamageAbsorption || 0) / 10).toFixed(1)] : null,
     s.BlockChance ? ["Block", ((s.BlockChance || 0) / 10).toFixed(1) + "%"] : null,
-    s.ChaosResistance ? ["Resist. caos", (s.ChaosResistance || 0).toFixed(0) + "%"] : null,
-    s.MovementSpeed ? ["Vel. mov.", intfmt(s.MovementSpeed)] : null,
+    s.ChaosResistance ? [t("Chaos resist.", "Resist. caos"), (s.ChaosResistance || 0).toFixed(0) + "%"] : null,
+    s.MovementSpeed ? [t("Move speed", "Vel. mov."), intfmt(s.MovementSpeed)] : null,
   ].filter(Boolean);
   return (
     <div className="statlist">
@@ -347,9 +352,10 @@ function Doll({ build, work, cap, selIdx, onSelect, tipFor }) {
 
 /* tira de sockets do slot selecionado (remover direto na direita) */
 function SelSock({ slot, cap, onRemove }) {
+  const t = useT();
   if (!slot) return null;
   const g = gradeOf(slot.grade);
-  const types = [["deco", "Decoração"], ["engr", "Gravação"], ["inscr", "Inscrição"]].filter(([t]) => cap[t] > 0);
+  const types = [["deco", t("Decoration", "Decoração")], ["engr", t("Engraving", "Gravação")], ["inscr", t("Inscription", "Inscrição")]].filter(([ty]) => cap[ty] > 0);
   return (
     <div className="sel-sock">
       <div className="ss-head">
@@ -358,18 +364,18 @@ function SelSock({ slot, cap, onRemove }) {
         <span className="muted small">Lv{slot.level}</span>
       </div>
       {types.length === 0 ? (
-        <div className="ss-empty small">sem socket nesse item</div>
+        <div className="ss-empty small">{t("no socket on this item", "sem socket nesse item")}</div>
       ) : (
         <div className="ss-rows">
-          {types.map(([t, lbl]) => {
-            const cur = slot.sockets.map((sk, k) => ({ sk, k })).filter((o) => o.sk.type === t);
+          {types.map(([ty, lbl]) => {
+            const cur = slot.sockets.map((sk, k) => ({ sk, k })).filter((o) => o.sk.type === ty);
             return (
-              <div className="ss-row" key={t}>
-                <span className={"ss-cap " + t}>{lbl} {cur.length}/{cap[t]}</span>
-                {cur.length === 0 ? <span className="ss-empty">vazio</span> : cur.map((o) => (
-                  <span className={"csock " + t} key={o.k}>
+              <div className="ss-row" key={ty}>
+                <span className={"ss-cap " + ty}>{lbl} {cur.length}/{cap[ty]}</span>
+                {cur.length === 0 ? <span className="ss-empty">{t("empty", "vazio")}</span> : cur.map((o) => (
+                  <span className={"csock " + ty} key={o.k}>
                     {o.sk.gemName || o.sk.stat}
-                    <button className="x" title="remover" onClick={() => onRemove(o.k)}>×</button>
+                    <button className="x" title={t("remove", "remover")} onClick={() => onRemove(o.k)}>×</button>
                   </span>
                 ))}
               </div>
@@ -383,17 +389,18 @@ function SelSock({ slot, cap, onRemove }) {
 
 /* lista (esquerda): aba item/gem + filtros + opções */
 const TABS = [
-  { id: "item", label: "Trocar item", cls: "" },
-  { id: "deco", label: "Decoração", cls: "" },
-  { id: "engr", label: "Gravação", cls: "engr" },
-  { id: "inscr", label: "Inscrição", cls: "inscr" },
+  { id: "item", labelEn: "Swap item", labelPt: "Trocar item", cls: "" },
+  { id: "deco", labelEn: "Decoration", labelPt: "Decoração", cls: "" },
+  { id: "engr", labelEn: "Engraving", labelPt: "Gravação", cls: "engr" },
+  { id: "inscr", labelEn: "Inscription", labelPt: "Inscrição", cls: "inscr" },
 ];
 function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet, onEquipItem, onEquipGem, tipFor }) {
+  const t = useT();
   // gem em configuração (escolha do stat + roll) antes de encaixar
   const [pick, setPick] = useState(null);   // {itemKey, optIdx, value}
   useEffect(() => { setPick(null); }, [slot?.itemKey, tab]);
-  if (!slot) return <section className="sec b-cat"><div className="b-empty">selecione um slot</div></section>;
-  if (!catalog) return <section className="sec b-cat"><div className="b-empty">carregando catálogo…</div></section>;
+  if (!slot) return <section className="sec b-cat"><div className="b-empty">{t("select a slot", "selecione um slot")}</div></section>;
+  if (!catalog) return <section className="sec b-cat"><div className="b-empty">{t("loading catalog…", "carregando catálogo…")}</div></section>;
   const g = gradeOf(slot.grade);
   const openPick = (r) => {
     let i = 0;
@@ -462,30 +469,30 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
         </div>
       </div>
       <div className="b-tabs">
-        {TABS.map((t) => {
-          const dis = t.id !== "item" && !cap[t.id];
+        {TABS.map((tb) => {
+          const dis = tb.id !== "item" && !cap[tb.id];
           return (
-            <button key={t.id} className={"b-tab " + t.cls + (tab === t.id ? " active" : "")}
-              disabled={dis} onClick={() => setTab(t.id)}>{t.label}</button>
+            <button key={tb.id} className={"b-tab " + tb.cls + (tab === tb.id ? " active" : "")}
+              disabled={dis} onClick={() => setTab(tb.id)}>{t(tb.labelEn, tb.labelPt)}</button>
           );
         })}
       </div>
       <div className="b-filters">
         <div className="frow">
-          <span className="lbl">buscar</span>
-          <input className="b-search" placeholder={isItem ? "item…" : "gem…"} value={filt.search}
+          <span className="lbl">{t("search", "buscar")}</span>
+          <input className="b-search" placeholder={isItem ? t("item…", "item…") : t("gem…", "gem…")} value={filt.search}
             onChange={(e) => set({ search: e.target.value })} />
-          <button className={"b-toggle" + (filt.invOnly ? " on" : "")} onClick={() => set({ invOnly: !filt.invOnly })}>só inventário</button>
+          <button className={"b-toggle" + (filt.invOnly ? " on" : "")} onClick={() => set({ invOnly: !filt.invOnly })}>{t("inventory only", "só inventário")}</button>
         </div>
         {isItem && (
           <>
             <div className="frow">
-              <span className="lbl">nível</span>
+              <span className="lbl">{t("level", "nível")}</span>
               <DualRange min={filt.lvlMin} max={filt.lvlMax} onChange={(a, b) => set({ lvlMin: a, lvlMax: b })} />
               <span className="b-range-val">Lv {filt.lvlMin}–{filt.lvlMax}</span>
             </div>
             <div className="frow">
-              <span className="lbl">tier</span>
+              <span className="lbl">{t("tier", "tier")}</span>
               <div className="b-chips">
                 {TIER_ORDER.map((gr) => (
                   <button key={gr} className="b-chip tchip" data-on={filt.tiers.has(gr) ? 1 : 0}
@@ -497,7 +504,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
         )}
         {statChips.length > 0 && (
           <div className="frow">
-            <span className="lbl">buff</span>
+            <span className="lbl">{t("buff", "buff")}</span>
             <div className="b-chips">
               {statChips.map((st) => (
                 <button key={st} className="b-chip schip" data-on={filt.stats.has(st) ? 1 : 0}
@@ -508,7 +515,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
         )}
       </div>
       <div className="b-list">
-        {view.length === 0 ? <div className="b-empty">Nada bate com os filtros.</div> : view.map((r, i) => {
+        {view.length === 0 ? <div className="b-empty">{t("Nothing matches the filters.", "Nada bate com os filtros.")}</div> : view.map((r, i) => {
           const gr = gradeOf(r.grade);
           const owned = ownedSet.has(r.itemKey);
           if (r.kind === "item") {
@@ -519,13 +526,13 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
                 <div className="op-meta">
                   <span className="op-name" style={{ color: gr.c }}>
                     {r.name}
-                    {r.equipped && <span className="op-tag eq">equipado</span>}
-                    {!r.equipped && owned && <span className="op-tag own">tenho</span>}
+                    {r.equipped && <span className="op-tag eq">{t("equipped", "equipado")}</span>}
+                    {!r.equipped && owned && <span className="op-tag own">{t("owned", "tenho")}</span>}
                   </span>
                   <span className="op-fx"><span style={{ color: gr.c }}>{gr.label} · Lv{r.level}</span></span>
                 </div>
-                {r.equipped ? <span className="op-eqtag">equipado</span>
-                  : <button className="b-equip" onClick={() => onEquipItem(r)}>equipar</button>}
+                {r.equipped ? <span className="op-eqtag">{t("equipped", "equipado")}</span>
+                  : <button className="b-equip" onClick={() => onEquipItem(r)}>{t("equip", "equipar")}</button>}
               </div>
             );
           }
@@ -543,16 +550,16 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
                 <div className="op-meta">
                   <span className="op-name" style={{ color: gr.c }}>
                     {r.name}
-                    {owned && <span className="op-tag own">tenho</span>}
+                    {owned && <span className="op-tag own">{t("owned", "tenho")}</span>}
                   </span>
                   <span className="op-fx op-stat">
-                    {multi ? `${r.opts.length} opções` : statPt(opt.stat) + " " + opt.min + "~" + opt.max}
+                    {multi ? `${r.opts.length} ${t("options", "opções")}` : statPt(opt.stat) + " " + opt.min + "~" + opt.max}
                     {" · " + tierLabel(opt.tier)}
                   </span>
                 </div>
-                <button className="b-equip" disabled={full} title={full ? "sem slot livre — remova um no card" : ""}
+                <button className="b-equip" disabled={full} title={full ? t("no free slot — remove one on the card", "sem slot livre — remova um no card") : ""}
                   onClick={() => full ? null : needsPick ? (open ? setPick(null) : openPick(r)) : onEquipGem(r, r.opts[0], r.opts[0].min)}>
-                  {full ? "cheio" : needsPick ? (open ? "fechar" : multi ? "escolher" : "ajustar") : "encaixar"}
+                  {full ? t("full", "cheio") : needsPick ? (open ? t("close", "fechar") : multi ? t("choose", "escolher") : t("adjust", "ajustar")) : t("socket", "encaixar")}
                 </button>
               </div>
               {open && (
@@ -571,7 +578,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
                     <span className="op-stat">{statText(opt.stat, opt.mod, pick.value)}</span>
                     {opt.min !== opt.max && <RollSlider min={opt.min} max={opt.max} value={pick.value} onChange={setRoll} />}
                     <span className="b-roll-range muted">{opt.min}~{opt.max}</span>
-                    <button className="b-equip go" disabled={full} onClick={() => { onEquipGem(r, opt, pick.value); setPick(null); }}>encaixar</button>
+                    <button className="b-equip go" disabled={full} onClick={() => { onEquipGem(r, opt, pick.value); setPick(null); }}>{t("socket", "encaixar")}</button>
                   </div>
                 </div>
               )}
@@ -613,6 +620,8 @@ function DualRange({ min, max, onChange }) {
 
 /* ---------------- página ---------------- */
 export default function BuildsPage({ sim }) {
+  const t = useT();
+  const { lang } = useLang();
   const builds = sim?.builds || [];
   const owned = sim?.owned || [];
   const ownedSet = useMemo(() => new Set(owned), [owned]);
@@ -620,12 +629,12 @@ export default function BuildsPage({ sim }) {
   const [catalog, setCatalog] = useState(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/catalog").then((r) => r.json()).then((d) => { if (alive && d && !d.error) setCatalog(d); }).catch(() => {});
+    fetch("/api/catalog?lang=" + lang).then((r) => r.json()).then((d) => { if (alive && d && !d.error) setCatalog(d); }).catch(() => {});
     return () => { alive = false; };
-  }, []);
+  }, [lang]);
 
   if (!builds.length)
-    return <main className="page no-rail"><div className="loading">sem dados de heróis ainda…</div></main>;
+    return <main className="page no-rail"><div className="loading">{t("no hero data yet…", "sem dados de heróis ainda…")}</div></main>;
   if (sel == null) return <Roster builds={builds} onPick={setSel} />;
   const build = builds.find((b) => b.key === sel) || builds[0];
   return (

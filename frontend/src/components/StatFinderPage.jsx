@@ -3,8 +3,9 @@ import { gradeOf, gearPt } from "../grades.js";
 import {
   statPt, catOf, statRange, statText, valRange, valText, tierTop, tierLabel, TIER_ORDER,
 } from "../gemFormat.js";
+import { useT, useLang } from "../i18n.jsx";
 
-const TYPES = [["all", "Todos"], ["weapon", "Arma"], ["offhand", "Off-hand"], ["armor", "Armadura"], ["accessory", "Acessório"]];
+const TYPES = [["all", "All", "Todos"], ["weapon", "Weapon", "Arma"], ["offhand", "Off-hand", "Off-hand"], ["armor", "Armor", "Armadura"], ["accessory", "Accessory", "Acessório"]];
 const GEARTYPE_TYPE = {
   SWORD: "weapon", AXE: "weapon", BOW: "weapon", CROSSBOW: "weapon", SCEPTER: "weapon", STAFF: "weapon", HATCHET: "weapon",
   SHIELD: "offhand", ORB: "offhand", TOME: "offhand", ARROW: "offhand", BOLT: "offhand",
@@ -12,8 +13,8 @@ const GEARTYPE_TYPE = {
   AMULET: "accessory", EARING: "accessory", RING: "accessory", BRACER: "accessory",
 };
 const TYPE_CAT = { weapon: "WEAPON", offhand: "WEAPON", armor: "ARMOR", accessory: "ACCESSORY" };
-const SRC_LABEL = { deco: "Decoração", engr: "Gravação", inscr: "Inscrição" };
-const CAT_PT = { WEAPON: "Arma", ARMOR: "Armadura", ACCESSORY: "Acessório", COMMON: "Qualquer slot" };
+const SRC_L = { deco: ["Decoration", "Decoração"], engr: ["Engraving", "Gravação"], inscr: ["Inscription", "Inscrição"] };
+const CAT_L = { WEAPON: ["Weapon", "Arma"], ARMOR: ["Armor", "Armadura"], ACCESSORY: ["Accessory", "Acessório"], COMMON: ["Any slot", "Qualquer slot"] };
 const LVL_MAX = 100;
 const CAP = 120;
 
@@ -38,6 +39,8 @@ function DualRange({ min, max, onChange }) {
 }
 
 export default function StatFinderPage({ sim }) {
+  const t = useT();
+  const { lang } = useLang();
   const owned = useMemo(() => new Set(sim?.owned || []), [sim]);
   const [catalog, setCatalog] = useState(null);
   const [type, setType] = useState("all");
@@ -49,10 +52,10 @@ export default function StatFinderPage({ sim }) {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/catalog").then((r) => r.json())
+    fetch("/api/catalog?lang=" + lang).then((r) => r.json())
       .then((d) => { if (alive && d && !d.error) setCatalog(d); }).catch(() => {});
     return () => { alive = false; };
-  }, []);
+  }, [lang]);
 
   const { entries, gemByKey } = useMemo(() => {
     const out = [], gk = {};
@@ -107,7 +110,7 @@ export default function StatFinderPage({ sim }) {
     setRarity(r);
   };
 
-  if (!catalog) return <main className="page no-rail"><div className="loading">carregando catálogo…</div></main>;
+  if (!catalog) return <main className="page no-rail"><div className="loading">{t("loading catalog…", "carregando catálogo…")}</div></main>;
 
   const passes = (e) => {
     if (!typeMatch(e, type)) return false;
@@ -141,7 +144,7 @@ export default function StatFinderPage({ sim }) {
     const lines = attrs.size ? lines0.filter((l) => attrs.has(l.stat))
       : (e.srcType === "inscr" ? [] : lines0);
     const sub = e.kind === "gem"
-      ? `${SRC_LABEL[e.srcType]} · ${gr.label}`
+      ? `${t(...SRC_L[e.srcType])} · ${gr.label}`
       : `${gearPt(e.gearType)} · Lv${e.level} · ${gr.label}`;
     return (
       <div className="acard" key={e.itemKey + "_" + e.cat + "_" + i} style={{ "--g": gr.c }}
@@ -149,7 +152,7 @@ export default function StatFinderPage({ sim }) {
         <div className="acard-h">
           <ItemIco k={e.itemKey} name={e.name} grade={e.grade} />
           <div className="acard-id">
-            <span className="acard-nm">{e.name}{owned.has(e.itemKey) && <span className="op-tag own">tenho</span>}</span>
+            <span className="acard-nm">{e.name}{owned.has(e.itemKey) && <span className="op-tag own">{t("owned", "tenho")}</span>}</span>
             <span className="acard-sub">{sub}</span>
           </div>
           {e.kind === "gem" && <span className="acard-tier">{tierLabel(e.maxTier)}</span>}
@@ -170,49 +173,49 @@ export default function StatFinderPage({ sim }) {
 
   return (
     <main className="page no-rail finder">
-      <h1>Atributos</h1>
+      <h1>{t("Attributes", "Atributos")}</h1>
 
       <div className="afilters">
-        <Row label="Tipo">
-          {TYPES.map(([id, l]) => (
-            <button key={id} className={"achip" + (type === id ? " on" : "")} onClick={() => pickType(id)}>{l}</button>
+        <Row label={t("Type", "Tipo")}>
+          {TYPES.map(([id, en, pt]) => (
+            <button key={id} className={"achip" + (type === id ? " on" : "")} onClick={() => pickType(id)}>{t(en, pt)}</button>
           ))}
         </Row>
-        <Row label="Raridade">
-          <button className={"achip" + (rarity === "all" ? " on" : "")} onClick={() => pickRarity("all")}>Todas</button>
+        <Row label={t("Rarity", "Raridade")}>
+          <button className={"achip" + (rarity === "all" ? " on" : "")} onClick={() => pickRarity("all")}>{t("All", "Todas")}</button>
           {rarChips.map((g) => (
             <button key={g} className={"achip rchip" + (rarity === g ? " on" : "")}
               style={{ "--g": gradeOf(g).c }} onClick={() => pickRarity(g)}>{gradeOf(g).label}</button>
           ))}
         </Row>
         {attrChips.length > 0 && (
-          <Row label="Atributo">
+          <Row label={t("Attribute", "Atributo")}>
             {attrChips.map((s) => (
               <button key={s} className={"achip" + (attrs.has(s) ? " on" : "")} onClick={() => toggleAttr(s)}>{statPt(s)}</button>
             ))}
           </Row>
         )}
-        <Row label="Nível">
-          <span className="lvbox">mín {lvl[0]}</span><span className="lvbox">máx {lvl[1]}</span>
+        <Row label={t("Level", "Nível")}>
+          <span className="lvbox">{t("min", "mín")} {lvl[0]}</span><span className="lvbox">{t("max", "máx")} {lvl[1]}</span>
           <DualRange min={lvl[0]} max={lvl[1]} onChange={(a, b) => setLvl([a, b])} />
         </Row>
-        <Row label="Buscar">
-          <input className="b-search" placeholder="filtrar pelo nome…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Row label={t("Search", "Buscar")}>
+          <input className="b-search" placeholder={t("filter by name…", "filtrar pelo nome…")} value={q} onChange={(e) => setQ(e.target.value)} />
         </Row>
       </div>
 
-      <div className="finder-count">{view.length} resultado{view.length === 1 ? "" : "s"}{view.length > CAP && <span className="muted"> · mostrando {CAP}</span>}</div>
+      <div className="finder-count">{view.length} {t(view.length === 1 ? "result" : "results", view.length === 1 ? "resultado" : "resultados")}{view.length > CAP && <span className="muted"> · {t("showing", "mostrando")} {CAP}</span>}</div>
 
-      {view.length === 0 && <div className="b-empty">Nada bate com os filtros.</div>}
+      {view.length === 0 && <div className="b-empty">{t("Nothing matches the filters.", "Nada bate com os filtros.")}</div>}
       {gems.length > 0 && (
         <>
-          <div className="finder-sec-h"><span className="t">Gemas</span><span className="ln" /><span className="n">{gems.length}</span></div>
+          <div className="finder-sec-h"><span className="t">{t("Gems", "Gemas")}</span><span className="ln" /><span className="n">{gems.length}</span></div>
           <div className="acard-grid">{gems.map(card)}</div>
         </>
       )}
       {gear.length > 0 && (
         <>
-          <div className="finder-sec-h"><span className="t">Equipamentos</span><span className="ln" /><span className="n">{gear.length}</span></div>
+          <div className="finder-sec-h"><span className="t">{t("Equipment", "Equipamentos")}</span><span className="ln" /><span className="n">{gear.length}</span></div>
           <div className="acard-grid">{gear.map(card)}</div>
         </>
       )}
@@ -234,6 +237,7 @@ function Row({ label, children }) {
 }
 
 function FinderTip({ e, gem }) {
+  const t = useT();
   const gr = gradeOf(e.grade);
   if (e.kind === "gear") {
     return (
@@ -250,11 +254,11 @@ function FinderTip({ e, gem }) {
   return (
     <>
       <div className="tip-name" style={{ color: gr.c }}>{e.name}</div>
-      <div className="tip-meta">{SRC_LABEL[e.srcType]} · {gr.label}</div>
+      <div className="tip-meta">{t(...SRC_L[e.srcType])} · {gr.label}</div>
       <div className="tip-stats">
         {Object.entries(groups).map(([cat, opts]) => (
           <div key={cat}>
-            <div className="tip-cat">{CAT_PT[cat] || cat}</div>
+            <div className="tip-cat">{CAT_L[cat] ? t(...CAT_L[cat]) : cat}</div>
             {opts.map((o, i) => <div className="tip-stat" key={i}>{statRange(o.stat, o.mod, o.min, o.max)} · {tierLabel(o.tier)}</div>)}
           </div>
         ))}

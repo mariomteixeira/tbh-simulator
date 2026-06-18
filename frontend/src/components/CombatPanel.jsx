@@ -1,25 +1,28 @@
 import React from "react";
 import { fmt, fmtDur } from "../format.js";
 import { elemPt } from "../statNames.js";
+import { useT } from "../i18n.jsx";
 
 const VERDICT = {
-  passa: { label: "passa", cls: "v-pass" },
-  apertado: { label: "apertado", cls: "v-tight" },
-  arriscado: { label: "arriscado", cls: "v-risk" },
+  passa: { en: "pass", label: "passa", cls: "v-pass" },
+  apertado: { en: "tight", label: "apertado", cls: "v-tight" },
+  arriscado: { en: "risky", label: "arriscado", cls: "v-risk" },
 };
 
 /* número cheio (sem K/M) — golpe e dano tomado precisam ser exatos */
 const full = (n) => Math.round(n || 0).toLocaleString("pt-BR");
 
 export default function CombatPanel({ combat }) {
+  const t = useT();
   if (!combat || combat.length === 0) return null;
   return (
     <section className="sec">
-      <h2>Combate por fase</h2>
+      <h2>{t("Combat by stage", "Combate por fase")}</h2>
       <p className="muted small">
-        Sua fase atual e as próximas que você ainda não passa, com o veredito e o
-        que falta. O golpe é o maior daquele elemento; "toma" é o dano por golpe
-        já depois de armadura/resistência, redução e absorção.
+        {t(
+          'Your current stage and the next ones you can\'t clear yet, with the verdict and what\'s missing. The hit is the biggest of that element; "takes" is the damage per hit after armor/resistance, reduction and absorption.',
+          'Sua fase atual e as próximas que você ainda não passa, com o veredito e o que falta. O golpe é o maior daquele elemento; "toma" é o dano por golpe já depois de armadura/resistência, redução e absorção.'
+        )}
       </p>
       <div className="combat-list">
         {combat.map((c) => {
@@ -31,17 +34,17 @@ export default function CombatPanel({ combat }) {
                   <span className={"diff-tag t-" + c.tag}>{c.tag}</span>{" "}
                   <b>{c.label}</b> {c.name}{" "}
                   <span className="muted">Lv{c.lvl}</span>
-                  {c.current && <span className="combat-cur">atual</span>}
+                  {c.current && <span className="combat-cur">{t("current", "atual")}</span>}
                 </span>
                 <span className="combat-verdict">
-                  <span className={"verdict-badge " + v.cls}>{v.label}</span>
+                  <span className={"verdict-badge " + v.cls}>{t(v.en, v.label)}</span>
                   {c.bottleneck && (
                     <span className="combat-gap">
-                      falta {c.bottleneck}
+                      {t("missing", "falta")} {c.bottleneck}
                       {c.bottleneck === "defesa" && c.threat && (
                         c.threat === "Physical"
-                          ? <> (armadura)</>
-                          : <> (resist {elemPt(c.threat)})</>
+                          ? <> {t("(armor)", "(armadura)")}</>
+                          : <> {t("(resist", "(resist")} {elemPt(c.threat)})</>
                       )}
                     </span>
                   )}
@@ -49,11 +52,11 @@ export default function CombatPanel({ combat }) {
               </div>
               <div className="combat-stats">
                 <span>
-                  <i>dano do time</i>
+                  <i>{t("team damage", "dano do time")}</i>
                   <b>{fmt(c.partyDps)}/s · clear {fmtDur(c.clearTime)}</b>
                 </span>
                 <span>
-                  <i>frente mais frágil</i>
+                  <i>{t("frailest front line", "frente mais frágil")}</i>
                   <b>
                     {c.weakestHero}
                     {c.weakestHp ? <span className="muted"> · HP {full(c.weakestHp)}</span> : null}
@@ -69,12 +72,12 @@ export default function CombatPanel({ combat }) {
                       key={e.element}
                     >
                       <span className="bd-el">{elemPt(e.element)}</span>
-                      <span className="bd-cell">golpe <b>{full(e.rawHit)}</b></span>
+                      <span className="bd-cell">{t("hit", "golpe")} <b>{full(e.rawHit)}</b></span>
                       <span className="bd-arrow">→</span>
-                      <span className="bd-cell">toma <b>{full(e.taken)}</b>/golpe</span>
+                      <span className="bd-cell">{t("takes", "toma")} <b>{full(e.taken)}</b>/{t("hit", "golpe")}</span>
                       <span className="bd-arrow">→</span>
                       <span className="bd-cell bd-hits">
-                        <b>{e.hits ?? "—"}</b> golpe{e.hits === 1 ? "" : "s"}
+                        <b>{e.hits ?? "—"}</b> {t("hit", "golpe")}{e.hits === 1 ? "" : t("s", "s")}
                       </span>
                     </div>
                   ))}
@@ -83,22 +86,22 @@ export default function CombatPanel({ combat }) {
 
               {c.needResist && (
                 <div className="combat-fix">
-                  <b>+{c.needResist.points}</b> resist {elemPt(c.needResist.element)} no{" "}
-                  {c.weakestHero} → aguenta {c.needResist.hits} golpes
+                  <b>+{c.needResist.points}</b> {t("resist", "resist")} {elemPt(c.needResist.element)} {t("on", "no")}{" "}
+                  {c.weakestHero} → {t("survives", "aguenta")} {c.needResist.hits} {t("hits", "golpes")}
                   {c.needResist.capped && (
                     <span className="muted">
-                      {" "}(no teto {c.needResist.resTarget}% — ainda precisa de HP/redução de dano)
+                      {" "}({t("at the cap", "no teto")} {c.needResist.resTarget}% — {t("still needs HP/damage reduction", "ainda precisa de HP/redução de dano")})
                     </span>
                   )}
                 </div>
               )}
               {c.needArmor && (
                 <div className="combat-fix">
-                  <b>+{full(c.needArmor.points)}</b> de armadura no {c.weakestHero}
+                  <b>+{full(c.needArmor.points)}</b> {t("of armor on", "de armadura no")} {c.weakestHero}
                   {" "}({full(c.needArmor.armorNow)} → {full(c.needArmor.armorTarget)})
                   {c.needArmor.capped
-                    ? <span className="muted"> — no teto de mitigação (75%) ainda não chega a {c.needArmor.hits} golpes; precisa de HP/redução de dano também</span>
-                    : <> → aguenta {c.needArmor.hits} golpes</>}
+                    ? <span className="muted"> {t(`— at the mitigation cap (75%) still doesn't reach ${c.needArmor.hits} hits; also needs HP/damage reduction`, `— no teto de mitigação (75%) ainda não chega a ${c.needArmor.hits} golpes; precisa de HP/redução de dano também`)}</span>
+                    : <> → {t("survives", "aguenta")} {c.needArmor.hits} {t("hits", "golpes")}</>}
                 </div>
               )}
             </div>

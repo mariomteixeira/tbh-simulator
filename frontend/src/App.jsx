@@ -13,18 +13,21 @@ import RunesPage from "./components/RunesPage.jsx";
 import CubePanel from "./components/CubePanel.jsx";
 import BuildsPage from "./components/BuildsPage.jsx";
 import StatFinderPage from "./components/StatFinderPage.jsx";
+import { useT, useLang, tr, ratingLabel } from "./i18n.jsx";
 
 const ROUTES = [
-  { id: "farm", hash: "#/", label: "Farm", group: "Painel", icon: "i-farm" },
-  { id: "boxes", hash: "#/baus", label: "Baús", group: "Painel", icon: "i-box" },
-  { id: "builds", hash: "#/builds", label: "Builds", group: "Painel", icon: "i-build" },
-  { id: "stats", hash: "#/atributos", label: "Atributos", group: "Painel", icon: "i-find" },
-  { id: "cube", hash: "#/cubo", label: "Cubo", group: "Painel", icon: "i-cube" },
-  { id: "runes", hash: "#/runas", label: "Runas", group: "Painel", icon: "i-rune" },
-  { id: "heroes", hash: "#/herois", label: "Heróis & Gear", group: "Painel", icon: "i-hero" },
-  { id: "offline", hash: "#/offline", label: "Offline", group: "Painel", icon: "i-off" },
-  { id: "model", hash: "#/modelo", label: "Calibração", group: "Sistema", icon: "i-model" },
+  { id: "farm", hash: "#/", label: "Farm", pt: "Farm", group: "panel", icon: "i-farm" },
+  { id: "boxes", hash: "#/baus", label: "Chests", pt: "Baús", group: "panel", icon: "i-box" },
+  { id: "builds", hash: "#/builds", label: "Builds", pt: "Builds", group: "panel", icon: "i-build" },
+  { id: "stats", hash: "#/atributos", label: "Attributes", pt: "Atributos", group: "panel", icon: "i-find" },
+  { id: "cube", hash: "#/cubo", label: "Cube", pt: "Cubo", group: "panel", icon: "i-cube" },
+  { id: "runes", hash: "#/runas", label: "Runes", pt: "Runas", group: "panel", icon: "i-rune" },
+  { id: "heroes", hash: "#/herois", label: "Heroes & Gear", pt: "Heróis & Gear", group: "panel", icon: "i-hero" },
+  { id: "offline", hash: "#/offline", label: "Offline", pt: "Offline", group: "panel", icon: "i-off" },
+  { id: "model", hash: "#/modelo", label: "Calibration", pt: "Calibração", group: "system", icon: "i-model" },
 ];
+const GROUP_PT = { panel: "Painel", system: "Sistema" };
+const GROUP_EN = { panel: "Panel", system: "System" };
 
 /* ícones pixel (silhuetas crispEdges) — copiados do mockup; injetados 1x no shell */
 function NavIcons() {
@@ -140,13 +143,13 @@ function CeilingPicker({ farm }) {
   const shown = pending !== null ? pending : String(farm.ceiling ?? "");
   return (
     <div>
-      <h3>Teto — até onde você farma</h3>
+      <h3>{tr("Ceiling — how far you farm", "Teto — até onde você farma")}</h3>
       <select
         className="ceiling-sel"
         value={shown}
         onChange={(e) => set(e.target.value)}
       >
-        <option value="">sem teto (tudo liberado)</option>
+        <option value="">{tr("no ceiling (all unlocked)", "sem teto (tudo liberado)")}</option>
         {opts.map((r) => (
           <option key={r.key} value={r.key}>
             {r.tag} {r.label} — {r.name}
@@ -154,9 +157,9 @@ function CeilingPicker({ farm }) {
         ))}
       </select>
       <p className="muted small" style={{ marginTop: 6 }}>
-        {pending !== null && <em className="muted">aplicando… </em>}
-        Nada <b>acima do teto</b> entra em recomendação (farm, push ou baús) —
-        mesmo que o jogo já tenha liberado.
+        {pending !== null && <em className="muted">{tr("applying… ", "aplicando… ")}</em>}
+        {tr(<>Nothing <b>above the ceiling</b> enters recommendations (farm, push or chests) — even if the game already unlocked it.</>,
+          <>Nada <b>acima do teto</b> entra em recomendação (farm, push ou baús) — mesmo que o jogo já tenha liberado.</>)}
       </p>
     </div>
   );
@@ -171,22 +174,22 @@ function FarmPage({ sim }) {
       <>
         <CeilingPicker farm={f} />
         <RailRows
-          title="Recomendações"
+          title={tr("Recommendations", "Recomendações")}
           rows={[
-            f.bestGold && ["melhor gold", <StageRef r={f.bestGold} />],
-            f.bestExp && ["melhor exp", <StageRef r={f.bestExp} />],
+            f.bestGold && [tr("best gold", "melhor gold"), <StageRef r={f.bestGold} />],
+            f.bestExp && [tr("best exp", "melhor exp"), <StageRef r={f.bestExp} />],
             f.push && ["push", <StageRef r={f.push} />],
           ]}
         />
         {cur && (
           <RailRows
-            title="Estágio atual"
+            title={tr("Current stage", "Estágio atual")}
             rows={[
-              ["fase", <StageRef r={cur} />],
-              ["clear previsto", fmtDur(cur.clearTime)],
+              [tr("stage", "fase"), <StageRef r={cur} />],
+              [tr("clear est.", "clear previsto"), fmtDur(cur.clearTime)],
               ["gold/h", fmt(cur.goldPerHour), "v-gold"],
               ["exp/h", fmt(cur.expPerHour), "v-exp"],
-              ["risco", cur.rating],
+              [tr("risk", "risco"), ratingLabel(cur.rating)],
             ]}
           />
         )}
@@ -203,37 +206,37 @@ function BoxesPage({ d, sim }) {
     rail: f && (
       <>
         <RailRows
-          title="Medido na sessão"
+          title={tr("Measured this session", "Medido na sessão")}
           rows={[
-            ["baús normais/h", chests.normal != null ? chests.normal.toFixed(1) : "—"],
-            ["baús de boss/h", chests.boss != null ? chests.boss.toFixed(1) : "—"],
+            [tr("normal chests/h", "baús normais/h"), chests.normal != null ? chests.normal.toFixed(1) : "—"],
+            [tr("boss chests/h", "baús de boss/h"), chests.boss != null ? chests.boss.toFixed(1) : "—"],
           ]}
         />
         {f.bestBossBox && (
           <RailRows
-            title="Bau do boss (azul)"
+            title={tr("Boss chest (blue)", "Bau do boss (azul)")}
             rows={[
-              ["melhor fase", <StageRef r={f.bestBossBox} />],
-              ["bau", f.bestBossBox.bossBox],
+              [tr("best stage", "melhor fase"), <StageRef r={f.bestBossBox} />],
+              [tr("chest", "bau"), f.bestBossBox.bossBox],
               ["clear", fmtDur(f.bestBossBox.clearTime)],
             ]}
           />
         )}
         {f.bestNormalBox && (
           <RailRows
-            title="Bau normal"
+            title={tr("Normal chest", "Bau normal")}
             rows={[
-              ["melhor fase", <StageRef r={f.bestNormalBox} />],
-              ["bau", f.bestNormalBox.normalBox],
+              [tr("best stage", "melhor fase"), <StageRef r={f.bestNormalBox} />],
+              [tr("chest", "bau"), f.bestNormalBox.normalBox],
             ]}
           />
         )}
         {f.dropBonus && (
           <RailRows
-            title="Bônus de chance"
+            title={tr("Chance bonus", "Bônus de chance")}
             rows={[
-              ["bau normal", "+" + f.dropBonus.normal + "%"],
-              ["bau do boss", "+" + f.dropBonus.boss + "%"],
+              [tr("normal chest", "bau normal"), "+" + f.dropBonus.normal + "%"],
+              [tr("boss chest", "bau do boss"), "+" + f.dropBonus.boss + "%"],
             ]}
           />
         )}
@@ -274,6 +277,8 @@ function ModelPage({ d, sim }) {
 export default function App() {
   const { data: d, online } = useSnapshot();
   const route = useRoute();
+  const t = useT();
+  const { lang, setLang } = useLang();
   const st = d?.state;
   const sim = d?.sim;
   const status = d?.status;
@@ -282,7 +287,7 @@ export default function App() {
 
   const msgs = [];
   if (status) {
-    if (!status.saveFound) msgs.push("Save não encontrado: " + status.savePath);
+    if (!status.saveFound) msgs.push(t("Save not found: ", "Save não encontrado: ") + status.savePath);
     else if (status.error) msgs.push(status.error);
     if (status.gamedataError) msgs.push(status.gamedataError);
     if (status.simError) msgs.push(status.simError);
@@ -310,8 +315,8 @@ export default function App() {
         <nav className="nav">
           {groups.map((g) => (
             <div className="nav-group" key={g}>
-              <div className="nav-group-label">{g}</div>
-              {ROUTES.filter((r) => r.group === g).map((r, i) => (
+              <div className="nav-group-label">{t(GROUP_EN[g] || g, GROUP_PT[g] || g)}</div>
+              {ROUTES.filter((r) => r.group === g).map((r) => (
                 <a
                   key={r.id}
                   href={r.hash}
@@ -320,7 +325,7 @@ export default function App() {
                   <svg viewBox="0 0 16 16" aria-hidden="true">
                     <use href={"#" + r.icon} />
                   </svg>
-                  {r.label}
+                  {t(r.label, r.pt)}
                 </a>
               ))}
             </div>
@@ -329,10 +334,10 @@ export default function App() {
         <div className="side-foot">
           <span>
             <span className={"conn-dot " + (online ? "ok" : "bad")} />
-            {online ? "conectado" : "sem backend"}
+            {online ? t("connected", "conectado") : t("no backend", "sem backend")}
           </span>
-          {status?.lastRead && <span>save lido {timeAgo(status.lastRead)}</span>}
-          <span>somente leitura</span>
+          {status?.lastRead && <span>{t("save read", "save lido")} {timeAgo(status.lastRead)}</span>}
+          <span>{t("read-only", "somente leitura")}</span>
         </div>
       </aside>
 
@@ -340,17 +345,21 @@ export default function App() {
         <header className="topbar">
           <div className="crumb">
             TBH Copilot <span className="sep">/</span>{" "}
-            <span className="here">{route.label}</span>
+            <span className="here">{t(route.label, route.pt)}</span>
           </div>
           <div className="topbar-right">
-            {st && <span>estágio {st.currentStage}</span>}
+            <div className="langsel" role="group" aria-label="Language">
+              <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
+              <button className={lang === "pt" ? "on" : ""} onClick={() => setLang("pt")}>PT</button>
+            </div>
+            {st && <span>{t("stage", "estágio")} {st.currentStage}</span>}
             <span className="live">
               {online ? (
                 <span className="dot" />
               ) : (
                 <span className="conn-dot bad" />
               )}
-              <span className="lbl">{online ? "ao vivo" : "sem backend"}</span>
+              <span className="lbl">{online ? t("live", "ao vivo") : t("no backend", "sem backend")}</span>
             </span>
             {version && <span className="ver">v{version}</span>}
           </div>
@@ -359,7 +368,7 @@ export default function App() {
         {msgs.length > 0 && <div className="banner">{msgs.join(" · ")}</div>}
 
         {!st ? (
-          <div className="loading">aguardando primeira leitura do save…</div>
+          <div className="loading">{t("waiting for first save read…", "aguardando primeira leitura do save…")}</div>
         ) : route.id === "runes" ? (
           <RunesPage key="runes" runes={sim?.runes} />
         ) : route.id === "builds" ? (
@@ -379,7 +388,7 @@ export default function App() {
         )}
 
         <footer className="foot">
-          o save nunca é tocado · dados: taskbarhero.wiki
+          {t("the save is never touched · data: taskbarhero.wiki", "o save nunca é tocado · dados: taskbarhero.wiki")}
         </footer>
       </div>
     </div>

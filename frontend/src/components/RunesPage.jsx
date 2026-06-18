@@ -11,6 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { fmt } from "../format.js";
 import { runeStatPt } from "../statNames.js";
+import { useT } from "../i18n.jsx";
 
 const TILE = 48; // tile quadrado, grade da wiki tem passo 72 (gap 24)
 
@@ -22,6 +23,7 @@ function nodeState(n) {
 }
 
 function RuneNode({ data }) {
+  const t = useT();
   const n = data.n;
   const rk = data.rank; // {kind: "c"|"f", rank: 1..3} ou undefined
   const cls =
@@ -30,17 +32,17 @@ function RuneNode({ data }) {
     (rk ? ` rk rk-${rk.kind}${rk.rank}` : "") +
     (data.inPath ? " inpath" : "");
   const tip =
-    `${n.name} — nv ${n.level}/${n.max}` +
+    `${n.name} — ${t("lv", "nv")} ${n.level}/${n.max}` +
     (n.unlocked
-      ? n.maxed ? " (máxima)" : ` · próx: ${fmt(n.nextCost)} gold`
-      : ` (bloqueada, pai nv ${n.req})`);
+      ? n.maxed ? t(" (max)", " (máxima)") : ` · ${t("next", "próx")}: ${fmt(n.nextCost)} gold`
+      : ` (${t("locked, parent lv", "bloqueada, pai nv")} ${n.req})`);
   return (
     <div className={cls} title={tip}>
       <Handle type="target" position={Position.Top} className="rh" />
       <img src={`/runeicons/${n.icon}.png`} alt="" draggable={false} />
       <span className="rt-lv">{n.level}/{n.max}</span>
       {rk && <span className={`rt-rank rr-${rk.kind}`}>{rk.rank}º</span>}
-      {data.needLevel != null && <span className="rt-need">nv{data.needLevel}</span>}
+      {data.needLevel != null && <span className="rt-need">{t("lv", "nv")}{data.needLevel}</span>}
       <Handle type="source" position={Position.Bottom} className="rh" />
     </div>
   );
@@ -49,6 +51,7 @@ function RuneNode({ data }) {
 const nodeTypes = { rune: RuneNode };
 
 function RecList({ title, recs, onPick, showSteps, kind }) {
+  const t = useT();
   if (!recs?.length) return null;
   return (
     <div>
@@ -64,12 +67,12 @@ function RecList({ title, recs, onPick, showSteps, kind }) {
             <img src={`/runeicons/${r.icon}.png`} alt="" />
             <span className="rec-body">
               <span className="rec-name">
-                {r.name} <em>nv {r.level}</em>
+                {r.name} <em>{t("lv", "nv")} {r.level}</em>
               </span>
               <span className="rec-gain">{r.label}</span>
               {showSteps && r.firstStep && (
                 <span className="rec-step">
-                  {r.steps} passo(s) · 1º: {r.firstStep.name} → nv{r.firstStep.toLevel}
+                  {r.steps} {t("step(s)", "passo(s)")} · 1º: {r.firstStep.name} → {t("lv", "nv")}{r.firstStep.toLevel}
                 </span>
               )}
             </span>
@@ -84,23 +87,24 @@ function RecList({ title, recs, onPick, showSteps, kind }) {
 }
 
 function RuneDetails({ n, onPick }) {
+  const t = useT();
   return (
     <div>
-      <h3>Runa selecionada</h3>
+      <h3>{t("Selected rune", "Runa selecionada")}</h3>
       <div className="rune-detail">
         <div className="rd-head">
           <img src={`/runeicons/${n.icon}.png`} alt="" />
           <div>
             <b>{n.name}</b>
             <span className="muted">
-              {" "}nível {n.level}/{n.max}
-              {!n.unlocked && " · bloqueada"}
+              {" "}{t("level", "nível")} {n.level}/{n.max}
+              {!n.unlocked && t(" · locked", " · bloqueada")}
             </span>
           </div>
         </div>
         {n.gain && (
           <p className="rd-gain">
-            próxima compra: <b>{runeStatPt(n.stat, n.nextValue ?? 0)}</b>
+            {t("next purchase", "próxima compra")}: <b>{runeStatPt(n.stat, n.nextValue ?? 0)}</b>
             {n.gain.label && n.gain.pct != null && (
               <> → <b className={n.gain.kind === "combate" ? "v-exp" : "v-gold"}>{n.gain.label}</b></>
             )}
@@ -108,25 +112,25 @@ function RuneDetails({ n, onPick }) {
         )}
         {n.path && n.path.steps.length > 0 && (
           <div className="rd-path">
-            <span className="rd-path-title">rota pra destravar</span>
+            <span className="rd-path-title">{t("path to unlock", "rota pra destravar")}</span>
             {n.path.steps.map((s, i) => (
               <button className="rd-step" key={i} onClick={() => onPick(s.key)}>
                 <img src={`/runeicons/${s.icon}.png`} alt="" />
                 <span>
-                  {s.name} <em>nv{s.fromLevel}→{s.toLevel}</em>
+                  {s.name} <em>{t("lv", "nv")}{s.fromLevel}→{s.toLevel}</em>
                 </span>
                 <b>{fmt(s.cost)} <em className="gold-unit">gold</em></b>
               </button>
             ))}
             <div className="rd-step total">
-              <span>total pra liberar</span>
+              <span>{t("total to unlock", "total pra liberar")}</span>
               <b className="v-gold">{fmt(n.path.chainCost)} <em className="gold-unit">gold</em></b>
             </div>
           </div>
         )}
         <table className="mini">
           <thead>
-            <tr><th>nv</th><th>efeito</th><th>custo</th></tr>
+            <tr><th>{t("lv", "nv")}</th><th>{t("effect", "efeito")}</th><th>{t("cost", "custo")}</th></tr>
           </thead>
           <tbody>
             {n.perLevel.map((l) => (
@@ -146,6 +150,7 @@ function RuneDetails({ n, onPick }) {
 }
 
 function Flow({ runes, sel, setSel }) {
+  const t = useT();
   const { setCenter } = useReactFlow();
 
   const byKey = useMemo(
@@ -233,15 +238,15 @@ function Flow({ runes, sel, setSel }) {
       <div className="main-col">
         <section className="sec flow-sec">
           <div className="sec-head">
-            <h2>Árvore de runas</h2>
+            <h2>{t("Rune tree", "Árvore de runas")}</h2>
             <div className="flow-legend">
-              <span><i className="lg maxed" /> máxima</span>
-              <span><i className="lg owned" /> comprada</span>
-              <span><i className="lg buyable" /> disponível</span>
-              <span><i className="lg locked" /> bloqueada</span>
-              <span><i className="lg rank-c" /> 1º combate</span>
-              <span><i className="lg rank-f" /> 1º farm</span>
-              <span><i className="lg path" /> rota</span>
+              <span><i className="lg maxed" /> {t("max", "máxima")}</span>
+              <span><i className="lg owned" /> {t("owned", "comprada")}</span>
+              <span><i className="lg buyable" /> {t("available", "disponível")}</span>
+              <span><i className="lg locked" /> {t("locked", "bloqueada")}</span>
+              <span><i className="lg rank-c" /> {t("1st combat", "1º combate")}</span>
+              <span><i className="lg rank-f" /> {t("1st farm", "1º farm")}</span>
+              <span><i className="lg path" /> {t("path", "rota")}</span>
               <span className="muted">gold: <b className="v-gold">{fmt(runes.gold)}</b></span>
             </div>
           </div>
@@ -283,19 +288,19 @@ function Flow({ runes, sel, setSel }) {
       <aside className="rail">
         {sel != null && byKey[sel] && <RuneDetails n={byKey[sel]} onPick={pick} />}
         <RecList
-          title="Rank — combate"
+          title={t("Rank — combat", "Rank — combate")}
           recs={runes.recommendations.combate.slice(0, 3)}
           onPick={pick}
           kind="c"
         />
         <RecList
-          title="Rank — farm"
+          title={t("Rank — farm", "Rank — farm")}
           recs={runes.recommendations.farm.slice(0, 3)}
           onPick={pick}
           kind="f"
         />
         <RecList
-          title="Vale destravar (rota)"
+          title={t("Worth unlocking (path)", "Vale destravar (rota)")}
           recs={runes.recommendations.destravar}
           onPick={pick}
           showSteps
@@ -306,8 +311,9 @@ function Flow({ runes, sel, setSel }) {
 }
 
 export default function RunesPage({ runes }) {
+  const t = useT();
   const [sel, setSel] = useState(null);
-  if (!runes) return <div className="loading">carregando runas…</div>;
+  if (!runes) return <div className="loading">{t("loading runes…", "carregando runas…")}</div>;
   return (
     <ReactFlowProvider>
       <Flow runes={runes} sel={sel} setSel={setSel} />

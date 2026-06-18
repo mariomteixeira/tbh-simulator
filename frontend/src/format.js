@@ -1,3 +1,5 @@
+import { tr } from "./i18n.jsx";
+
 export function fmt(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
   const abs = Math.abs(n);
@@ -31,8 +33,9 @@ export function fmtHours(h) {
 
 export function timeAgo(epoch) {
   const s = Math.round(Date.now() / 1000 - epoch);
-  if (s < 5) return "agora";
-  if (s < 60) return s + "s atrás";
-  if (s < 3600) return Math.floor(s / 60) + "min atrás";  // floor, igual ao launcher
-  return (s / 3600).toFixed(1) + "h atrás";
+  const ago = tr("ago", "atrás");
+  if (s < 5) return tr("now", "agora");
+  if (s < 60) return s + "s " + ago;
+  if (s < 3600) return Math.floor(s / 60) + "min " + ago;  // floor, igual ao launcher
+  return (s / 3600).toFixed(1) + "h " + ago;
 }

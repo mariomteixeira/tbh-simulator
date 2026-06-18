@@ -2,16 +2,18 @@ import React, { useMemo, useState, useRef, useEffect } from "react";
 import { fmt } from "../format.js";
 import { fmtStatDelta } from "../statNames.js";
 import { gradeOf, gearPt } from "../grades.js";
+import { useT } from "../i18n.jsx";
 
 // opção de fase: chip de dificuldade colorido + id em mono + nome
 function StageOpt({ o }) {
+  const t = useT();
   return (
     <span className="stage-opt">
       <span className={"diff " + o.tag}>{o.tag}</span>
       <span className="so-id num">{o.label}</span>
       <span className="dim so-name">{o.name}</span>
       <span className="dim num so-lv">Lv{o.lvl}</span>
-      {o.current && <span className="badge cur">atual</span>}
+      {o.current && <span className="badge cur">{t("current", "atual")}</span>}
     </span>
   );
 }
@@ -68,7 +70,8 @@ export function RoleTag({ role }) {
 }
 
 function Item({ it }) {
-  if (!it) return <span className="muted">vazio</span>;
+  const t = useT();
+  if (!it) return <span className="muted">{t("empty", "vazio")}</span>;
   const g = gradeOf(it.grade);
   // Cosmic (special) = holo: gradiente no nome em vez de cor flat.
   const nameStyle = g.special
@@ -82,7 +85,7 @@ function Item({ it }) {
   return (
     <span>
       <span style={nameStyle}>{it.name}</span>{" "}
-      <span className="muted">lvl {it.level}</span>
+      <span className="muted">{t("lvl", "lvl")} {it.level}</span>
     </span>
   );
 }
@@ -134,6 +137,7 @@ function flatten(heroes) {
 }
 
 export default function GearPanel({ gear }) {
+  const t = useT();
   const byStage = gear?.byStage || [];
   const [stageKey, setStageKey] = useState(null);
   const sel = useMemo(() => {
@@ -149,9 +153,9 @@ export default function GearPanel({ gear }) {
     <>
       {/* 1) UPGRADES DIRETOS — item é melhor no geral, independe da fase (TOPO) */}
       <section className="sec">
-        <h2>Gear — upgrades diretos</h2>
+        <h2>{t("Gear — direct upgrades", "Gear — upgrades diretos")}</h2>
         <p className="lbl" style={{ marginBottom: 10 }}>
-          Itens que são melhores no geral
+          {t("Items that are better overall", "Itens que são melhores no geral")}
         </p>
         {general.length > 0 ? (
           <div className="gear-list">
@@ -160,15 +164,15 @@ export default function GearPanel({ gear }) {
             ))}
           </div>
         ) : (
-          <p className="muted">Nenhuma troca melhor no inventário. Tudo otimizado.</p>
+          <p className="muted">{t("No better swap in your inventory. Everything optimized.", "Nenhuma troca melhor no inventário. Tudo otimizado.")}</p>
         )}
       </section>
 
       {/* 2) BUILD PRA UMA FASE — escolhe a fase, vê o que trocar pra aguentá-la */}
       <section className="sec">
-        <h2>Gear — build pra uma fase</h2>
+        <h2>{t("Gear — build for a stage", "Gear — build pra uma fase")}</h2>
         <div className="gear-stage-pick">
-          <span className="lbl">Escolha a fase</span>
+          <span className="lbl">{t("Choose the stage", "Escolha a fase")}</span>
           <StageSelect
             options={byStage}
             value={sel?.key}
@@ -183,8 +187,7 @@ export default function GearPanel({ gear }) {
           </div>
         ) : (
           <p className="muted">
-            Nada no inventário melhora o time pra essa fase. Veja a árvore de
-            skill/runas ou suba o nível dos itens.
+            {t("Nothing in your inventory improves the team for this stage. Check the skill/rune tree or level up your items.", "Nada no inventário melhora o time pra essa fase. Veja a árvore de skill/runas ou suba o nível dos itens.")}
           </p>
         )}
       </section>

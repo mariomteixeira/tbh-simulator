@@ -1322,6 +1322,13 @@ button.link:hover { color: var(--st-bad); }
 .acard-stat.hit { color: var(--ink); }
 .acard-stat.hit .v { color: var(--g); font-weight: 600; }
 
+/* seletor de idioma (topbar) */
+.langsel { display: inline-flex; border: 2px solid var(--line-2); }
+.langsel button { font-family: var(--mono); font-weight: 700; font-size: .72rem; color: var(--dim);
+  background: var(--bg); border: 0; padding: 4px 9px; cursor: pointer; letter-spacing: .02em; }
+.langsel button.on { color: var(--bg); background: var(--accent); }
+.langsel button:not(.on):hover { color: var(--ink); }
+
 /* tooltip (hover no card) — detalhe por categoria */
 .finder-tip { position: fixed; z-index: 200; pointer-events: none; width: 300px;
   background: var(--bg); border: 2px solid var(--accent-dim); box-shadow: 4px 4px 0 var(--shadow); padding: 11px 12px; }
