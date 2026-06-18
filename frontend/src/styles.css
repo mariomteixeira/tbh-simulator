@@ -1265,6 +1265,19 @@ button.link:hover { color: var(--st-bad); }
   border-top: 2px dashed var(--line); color: var(--ink); }
 .combat-fix b { font-family: var(--mono); color: var(--st-good); }
 
+/* detalhe por elemento: golpe -> toma/golpe -> nº de golpes */
+.combat-bd { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+.bd-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: .78rem; color: var(--dim);
+  padding: 3px 7px; }
+.bd-row.bd-threat { color: var(--ink); background: rgba(255, 91, 91, .07); }
+.bd-el { font-family: var(--label); font-size: .58rem; text-transform: uppercase;
+  letter-spacing: .04em; min-width: 52px; color: var(--ink); }
+.bd-cell b { color: var(--ink); }
+.bd-row.bd-threat .bd-hits b { color: var(--st-bad); }
+.bd-arrow { color: var(--line-2); }
+.bd-hits { margin-left: auto; }
+
 /* ============================================================ *
  *  Legenda (mockup) + grade chips
  * ============================================================ */

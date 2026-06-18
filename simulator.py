@@ -1003,6 +1003,57 @@ def resist_needed(stats: dict, stage_level: int, hit: float, el: str,
             "resNow": round(res_eff), "resTarget": round(res_tgt)}
 
 
+def _taken_per_hit(stats: dict, stage_level: int, el: str, hit: float,
+                   difficulty=None) -> float:
+    """Dano que UM golpe do elemento `el` causa de fato: depois de armadura
+    (físico) ou resistência (elemental/chaos), ×(1−DR) e −Absorção, com piso de
+    1. Mesma pipeline do hero_ehp — é o 'quanto vou tomar por golpe'."""
+    if hit <= 0:
+        return 0.0
+    penalty = _DIFF_RES_PENALTY.get(difficulty, 0.0)
+    frac = _taken_fraction(stats, stage_level, hit, el, penalty)
+    absorb = (stats.get("DamageAbsorption") or 0) / 10.0
+    return max(hit * frac * _final_mult(stats) - absorb, 1.0)
+
+
+def _armor_for_mit(m: float, stage_level: int, damage: float) -> float:
+    """Inverte mitigation(): a armadura que dá a fração de mitigação `m`."""
+    if m <= 0:
+        return 0.0
+    thr = 14.0 * max(stage_level, 1) + 12.0
+    # (1−m)a² − m·thr·a − m·thr·0.4·dmg = 0  ->  a² − B·a − C = 0
+    b = m * thr / (1 - m)
+    c = m * thr * 0.4 * max(damage, 0.0) / (1 - m)
+    return (b + (b * b + 4 * c) ** 0.5) / 2.0
+
+
+def armor_needed(stats: dict, stage_level: int, hit: float, target_hits: float):
+    """Quanta ARMADURA falta pro herói aguentar `target_hits` golpes FÍSICOS
+    nesta fase (análogo a resist_needed; físico mitiga por armadura, não resist).
+    Devolve None se já aguenta/sem dado; senão {points, capped, armorNow,
+    armorTarget}. capped=True: nem no teto de 75% de mitigação aguenta só com
+    armadura — precisa de HP/redução de dano também."""
+    if hit <= 0 or target_hits <= 0:
+        return None
+    hp = stats.get("MaxHp") or 0
+    drm = _final_mult(stats)
+    if hp <= 0 or drm <= 0:
+        return None
+    absorb = (stats.get("DamageAbsorption") or 0) / 10.0
+    armor_now = stats.get("Armor") or 0
+    taken_now = max(hit * (1 - mitigation(armor_now, stage_level, hit)) * drm - absorb, 1.0)
+    if hp / taken_now >= target_hits:      # já aguenta target_hits golpes
+        return None
+    taken_tgt = hp / target_hits           # dano por golpe alvo (absoluto)
+    one_minus_mit = (taken_tgt + absorb) / (hit * drm)
+    mit_tgt = 1 - one_minus_mit
+    cap = 0.75
+    capped = mit_tgt > cap
+    a_tgt = _armor_for_mit(min(mit_tgt, cap), stage_level, hit)
+    return {"points": max(0, round(a_tgt - armor_now)), "capped": capped,
+            "armorNow": round(armor_now), "armorTarget": round(a_tgt)}
+
+
 # ---------------------------------------------------------------------------
 # Calibracao por regressao (amostras MANUAIS cronometradas pelo usuario)
 # NOTA: a derivacao automatica de amostras a partir do totalClears do save
@@ -1687,6 +1738,21 @@ def combat_focus(gd: GameData, save: dict, fielded_saves: list, runes: dict,
         weakest_k = worst[2] if worst else None
         threat = worst[3] if worst else None
         ehp_min = round(worst[4]) if worst else 0
+        # detalhe por elemento PARA O HERÓI MAIS FRÁGIL: golpe bruto -> dano que
+        # ele toma de fato (após armadura/resist + DR + absorção) -> nº de golpes.
+        # Mostra POR QUE aguenta só N golpes e qual elemento é o problema.
+        wst = worst[1] if worst else None
+        weakest_hp = round(wst.get("MaxHp") or 0) if wst else 0
+        by_element = []
+        if wst:
+            for el, ehit in elem_hits.items():
+                if ehit <= 0:
+                    continue
+                tk = _taken_per_hit(wst, lvl, el, ehit, diff)
+                by_element.append({
+                    "element": el, "rawHit": round(ehit), "taken": round(tk),
+                    "hits": round(weakest_hp / tk, 1) if tk > 0 else None})
+            by_element.sort(key=lambda d: d["hits"] if d["hits"] is not None else 1e9)
         ct = r.get("clearTime") or 0.0
         rating = r.get("rating")
         # severidade = pior entre dois eixos INDEPENDENTES:
@@ -1704,11 +1770,17 @@ def combat_focus(gd: GameData, save: dict, fielded_saves: list, runes: dict,
         # = TARGET_HITS golpes, o mesmo limiar do veredito "passa"). Só faz
         # sentido quando o gargalo É defesa (clear lento não se resolve com resist).
         need_resist = None
+        need_armor = None
         if worst and threat and bottleneck == "defesa":
-            rn = resist_needed(worst[1], lvl, worst[5], threat,
-                               COMBAT_TARGET_HITS, difficulty=diff)
-            if rn and rn["points"] > 0:
-                need_resist = {"element": threat, "hits": COMBAT_TARGET_HITS, **rn}
+            if threat == "Physical":     # físico não tem resist -> quanta ARMADURA falta
+                an = armor_needed(worst[1], lvl, worst[5], COMBAT_TARGET_HITS)
+                if an and an["points"] > 0:
+                    need_armor = {"hits": COMBAT_TARGET_HITS, **an}
+            else:
+                rn = resist_needed(worst[1], lvl, worst[5], threat,
+                                   COMBAT_TARGET_HITS, difficulty=diff)
+                if rn and rn["points"] > 0:
+                    need_resist = {"element": threat, "hits": COMBAT_TARGET_HITS, **rn}
         out.append({
             "key": r["key"], "label": r["label"], "tag": r["tag"], "name": r["name"],
             "lvl": lvl, "diff": diff, "current": bool(r.get("current")),
@@ -1717,8 +1789,9 @@ def combat_focus(gd: GameData, save: dict, fielded_saves: list, runes: dict,
             "ehpMin": ehp_min, "hitsToDie": hits, "threat": threat,
             "weakestHero": (_name((gd.heroes.get(weakest_k) or {}).get("HeroNameKey_i18n"))
                             or str(weakest_k)),
+            "weakestHp": weakest_hp, "byElement": by_element,
             "verdict": verdict, "bottleneck": bottleneck, "rating": rating,
-            "needResist": need_resist,
+            "needResist": need_resist, "needArmor": need_armor,
         })
     return out
 
