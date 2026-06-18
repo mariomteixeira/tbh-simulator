@@ -1825,11 +1825,15 @@ def build_catalog(gd: GameData):
             continue
         groups = {}
         for cat, rows in (me.get("groups") or {}).items():
-            if rows:
-                r = rows[0]
-                groups[cat] = {"stat": r.get("stat"), "mod": r.get("mod"),
-                               "min": r.get("min"), "max": r.get("max"),
-                               "tier": r.get("tier")}
+            # TODAS as opções da gem: gravação = 2 stats 50/50, inscrição = ~16
+            # (uma é rolada); decoração = 1, mas com range min~max. O front deixa
+            # o usuário escolher QUAL (quantidade) e o ROLL (qualidade).
+            opts = [{"stat": r.get("stat"), "mod": r.get("mod"),
+                     "min": r.get("min"), "max": r.get("max"),
+                     "tier": r.get("tier"), "chance": r.get("chance")}
+                    for r in (rows or []) if r.get("stat")]
+            if opts:
+                groups[cat] = opts
         gems[short].append({
             "itemKey": k, "name": _name(item.get("name")) or det.get("name"),
             "grade": item.get("grade"), "groups": groups,

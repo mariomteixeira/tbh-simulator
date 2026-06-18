@@ -170,11 +170,11 @@ function Editor({ build, catalog, ownedSet, onBack }) {
     setWork((w) => { const nw = w.map((s) => ({ ...s, sockets: s.sockets.map((k) => ({ ...k })) })); mut(nw); return nw; });
   }
   function removeSock(k) { update((nw) => { nw[selIdx].sockets.splice(k, 1); }); }
-  function equipGem(row) {
-    const eff = row.eff;
-    if (!eff) return;
+  function equipGem(gm, opt, value) {
+    if (!opt) return;
     update((nw) => {
-      nw[selIdx].sockets.push({ type: tab, stat: eff.stat, mod: eff.mod, value: eff.max, gemKey: row.itemKey, gemName: row.name });
+      nw[selIdx].sockets.push({ type: tab, stat: opt.stat, mod: opt.mod, value,
+        min: opt.min, max: opt.max, gemKey: gm.itemKey, gemName: gm.name });
     });
   }
   function equipItem(it) {
@@ -247,7 +247,6 @@ function Delta({ v, unit }) {
 }
 
 /* ---------- tooltips (hover): cada stat numa linha, com valor + unidade ---------- */
-const TIP_CATS = [["WEAPON", "Arma"], ["ARMOR", "Armadura"], ["ACCESSORY", "Acessório"]];
 const STAT_EN = {
   AttackDamage: "Attack Damage", AttackSpeed: "Attack Speed", CastSpeed: "Cast Speed",
   CriticalChance: "Critical Chance", CriticalDamage: "Critical Damage", CooldownReduction: "Cooldown Reduction",
@@ -282,6 +281,10 @@ function statRange(stat, mod, mn, mx) {
   const u = statUnit(stat, mod);
   return `${engName(stat)} +${nfmt(mn, u)}~${nfmt(mx, u)}${u.suf}`;
 }
+/* tier pode ser número (deco/engr) ou faixa [a,b] (inscrição) */
+const tierTop = (t) => (Array.isArray(t) ? (t[t.length - 1] || 0) : (t || 0));
+const tierLabel = (t) => (Array.isArray(t) ? `T${t[0]}–${t[t.length - 1]}` : `T${t}`);
+const rollAvg = (o) => Math.round(((o.min || 0) + (o.max || 0)) / 2);
 
 function ItemTip({ r }) {
   const g = gradeOf(r.grade);
@@ -300,20 +303,23 @@ function ItemTip({ r }) {
 }
 function GemTip({ r }) {
   const g = gradeOf(r.grade);
+  const opts = r.opts || [];
+  const many = opts.length > 5;
+  const chance = opts[0]?.chance;
   return (
     <>
       <span className="tip-name" style={{ color: g.c }}>{r.name}</span>
+      {opts.length > 1 && (
+        <div className="tip-row">
+          <i>{opts.length} opções{chance && chance < 100 ? ` · ${Math.round(chance)}% cada` : ""}</i>
+          <span>{tierLabel(opts[0].tier)}</span>
+        </div>
+      )}
       <div className="tip-stats">
-        {TIP_CATS.map(([k, lbl]) => {
-          const e = r.groups && r.groups[k];
-          if (!e) return null;
-          return (
-            <div className="tip-catline" key={k}>
-              <span className="tip-cat">{lbl}</span>
-              <span className="tip-stat">{statRange(e.stat, e.mod, e.min, e.max)} · T{e.tier}</span>
-            </div>
-          );
-        })}
+        {(many ? opts.slice(0, 6) : opts).map((e, i) => (
+          <div className="tip-stat" key={i}>{statRange(e.stat, e.mod, e.min, e.max)}{opts.length === 1 ? ` · ${tierLabel(e.tier)}` : ""}</div>
+        ))}
+        {many && <div className="tip-stat muted">+{opts.length - 6} outras…</div>}
       </div>
     </>
   );
@@ -454,9 +460,19 @@ const TABS = [
   { id: "inscr", label: "Inscrição", cls: "inscr" },
 ];
 function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet, onEquipItem, onEquipGem, tipFor }) {
+  // gem em configuração (escolha do stat + roll) antes de encaixar
+  const [pick, setPick] = useState(null);   // {itemKey, optIdx, value}
+  useEffect(() => { setPick(null); }, [slot?.itemKey, tab]);
   if (!slot) return <section className="sec b-cat"><div className="b-empty">selecione um slot</div></section>;
   if (!catalog) return <section className="sec b-cat"><div className="b-empty">carregando catálogo…</div></section>;
   const g = gradeOf(slot.grade);
+  const openPick = (r) => {
+    let i = 0;
+    if (filt.stats.size) { const j = r.opts.findIndex((o) => filt.stats.has(o.stat)); if (j >= 0) i = j; }
+    setPick({ itemKey: r.itemKey, optIdx: i, value: rollAvg(r.opts[i]) });
+  };
+  const chooseOpt = (r, i) => setPick({ itemKey: r.itemKey, optIdx: i, value: rollAvg(r.opts[i]) });
+  const setRoll = (v) => setPick((p) => ({ ...p, value: v }));
 
   // monta as linhas conforme a aba
   const isItem = tab === "item";
@@ -469,20 +485,23 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
       .map((it) => ({ kind: "item", ...it }));
     rows = [cur, ...pool];
   } else {
+    // inscrição usa a chave "COMMON" (vale p/ qualquer slot); deco/engr por categoria
     rows = (catalog.gems[tab] || []).map((gm) => {
-      const eff = gm.groups?.[cat];
-      return { kind: "gem", itemKey: gm.itemKey, name: gm.name, grade: gm.grade, eff, statKey: eff?.stat, groups: gm.groups };
-    }).filter((r) => r.eff);
+      const opts = (tab === "inscr" ? gm.groups?.COMMON : gm.groups?.[cat]) || [];
+      const stats = [...new Set(opts.map((o) => o.stat))];
+      const maxTier = opts.reduce((m, o) => Math.max(m, tierTop(o.tier)), 0);
+      return { kind: "gem", itemKey: gm.itemKey, name: gm.name, grade: gm.grade, opts, stats, maxTier };
+    }).filter((r) => r.opts.length);
   }
 
   // stats disponíveis no pool (chips de buff)
   const statSet = new Set();
-  rows.forEach((r) => { if (r.kind === "gem") { if (r.statKey) statSet.add(r.statKey); } else (r.stats || []).forEach((x) => statSet.add(x)); });
+  rows.forEach((r) => (r.stats || []).forEach((x) => statSet.add(x)));
   // o item equipado não tem stats no catálogo cur; pega do pool por itemKey
   if (isItem) (catalog.items[slot.gearType] || []).forEach((it) => (it.stats || []).forEach((x) => statSet.add(x)));
   const statChips = [...statSet];
 
-  const matchStat = (r) => !filt.stats.size || (r.kind === "gem" ? (r.statKey && filt.stats.has(r.statKey)) : (r.stats || []).some((x) => filt.stats.has(x)));
+  const matchStat = (r) => !filt.stats.size || (r.stats || []).some((x) => filt.stats.has(x));
   const matchTxt = (n) => (n || "").toLowerCase().includes(filt.search.toLowerCase());
 
   let view;
@@ -498,7 +517,7 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
     // gems: ordena por tier (mais forte primeiro), nome como desempate
     view = rows
       .filter((r) => (!filt.invOnly || ownedSet.has(r.itemKey)) && matchTxt(r.name) && matchStat(r))
-      .sort((a, b) => (b.eff.tier || 0) - (a.eff.tier || 0) || (a.name || "").localeCompare(b.name || ""));
+      .sort((a, b) => (b.maxTier - a.maxTier) || (a.name || "").localeCompare(b.name || ""));
   }
 
   const set = (patch) => setFilt((f) => ({ ...f, ...patch }));
@@ -563,33 +582,87 @@ function Catalog({ slot, cat, cap, tab, setTab, filt, setFilt, catalog, ownedSet
         {view.length === 0 ? <div className="b-empty">Nada bate com os filtros.</div> : view.map((r, i) => {
           const gr = gradeOf(r.grade);
           const owned = ownedSet.has(r.itemKey);
-          const full = r.kind === "gem" && slot.sockets.filter((x) => x.type === tab).length >= (cap[tab] || 0);
-          return (
-            <div className={"b-opt" + (r.equipped ? " equipped" : "")} key={(r.itemKey || "x") + "_" + i}
-              style={{ "--g": gr.c }} {...tipFor(r.kind === "item" ? <ItemTip r={r} /> : <GemTip r={r} />)}>
-              <ItemIco k={r.itemKey} name={r.name} grade={r.grade} cls="op-ico" />
-              <div className="op-meta">
-                <span className="op-name" style={{ color: gr.c }}>
-                  {r.name}
-                  {r.equipped && <span className="op-tag eq">equipado</span>}
-                  {!r.equipped && owned && <span className="op-tag own">tenho</span>}
-                </span>
-                <span className="op-fx">
-                  {r.kind === "item"
-                    ? <span style={{ color: gr.c }}>{gradeOf(r.grade).label} · Lv{r.level}</span>
-                    : <span className="op-stat">{statPt(r.eff.stat)} {r.eff.mod === "MULTIPLICATIVE" ? "(more)" : r.eff.mod === "ADDITIVE" ? "(incr)" : ""} {r.eff.min}~{r.eff.max} · T{r.eff.tier}</span>}
-                </span>
+          if (r.kind === "item") {
+            return (
+              <div className={"b-opt" + (r.equipped ? " equipped" : "")} key={(r.itemKey || "x") + "_" + i}
+                style={{ "--g": gr.c }} {...tipFor(<ItemTip r={r} />)}>
+                <ItemIco k={r.itemKey} name={r.name} grade={r.grade} cls="op-ico" />
+                <div className="op-meta">
+                  <span className="op-name" style={{ color: gr.c }}>
+                    {r.name}
+                    {r.equipped && <span className="op-tag eq">equipado</span>}
+                    {!r.equipped && owned && <span className="op-tag own">tenho</span>}
+                  </span>
+                  <span className="op-fx"><span style={{ color: gr.c }}>{gr.label} · Lv{r.level}</span></span>
+                </div>
+                {r.equipped ? <span className="op-eqtag">equipado</span>
+                  : <button className="b-equip" onClick={() => onEquipItem(r)}>equipar</button>}
               </div>
-              {r.equipped ? <span className="op-eqtag">equipado</span> : (
-                r.kind === "gem"
-                  ? <button className="b-equip" disabled={full} title={full ? "sem slot livre — remova um no card" : ""} onClick={() => onEquipGem(r)}>{full ? "cheio" : "encaixar"}</button>
-                  : <button className="b-equip" onClick={() => onEquipItem(r)}>equipar</button>
+            );
+          }
+          // gem: escolhe stat (quantidade) + roll dentro do range (qualidade)
+          const full = slot.sockets.filter((x) => x.type === tab).length >= (cap[tab] || 0);
+          const open = pick?.itemKey === r.itemKey;
+          const multi = r.opts.length > 1;
+          const ranged = r.opts.some((o) => o.min !== o.max);
+          const needsPick = multi || ranged;
+          const opt = open ? r.opts[pick.optIdx] : r.opts[0];
+          return (
+            <div className={"b-opt gem" + (open ? " open" : "")} key={(r.itemKey || "x") + "_" + i} style={{ "--g": gr.c }}>
+              <div className="b-opt-head" {...tipFor(<GemTip r={r} />)}>
+                <ItemIco k={r.itemKey} name={r.name} grade={r.grade} cls="op-ico" />
+                <div className="op-meta">
+                  <span className="op-name" style={{ color: gr.c }}>
+                    {r.name}
+                    {owned && <span className="op-tag own">tenho</span>}
+                  </span>
+                  <span className="op-fx op-stat">
+                    {multi ? `${r.opts.length} opções` : statPt(opt.stat) + " " + opt.min + "~" + opt.max}
+                    {" · " + tierLabel(opt.tier)}
+                  </span>
+                </div>
+                <button className="b-equip" disabled={full} title={full ? "sem slot livre — remova um no card" : ""}
+                  onClick={() => full ? null : needsPick ? (open ? setPick(null) : openPick(r)) : onEquipGem(r, r.opts[0], r.opts[0].min)}>
+                  {full ? "cheio" : needsPick ? (open ? "fechar" : multi ? "escolher" : "ajustar") : "encaixar"}
+                </button>
+              </div>
+              {open && (
+                <div className="b-pick">
+                  {multi && (
+                    <div className="b-pick-opts">
+                      {r.opts.map((o, j) => (
+                        <button key={j} className="b-chip schip" data-on={j === pick.optIdx ? 1 : 0}
+                          onClick={() => chooseOpt(r, j)} title={statText(o.stat, o.mod, rollAvg(o))}>
+                          {statPt(o.stat)}{o.chance && o.chance < 100 ? " " + Math.round(o.chance) + "%" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="b-pick-roll">
+                    <span className="op-stat">{statText(opt.stat, opt.mod, pick.value)}</span>
+                    {opt.min !== opt.max && <RollSlider min={opt.min} max={opt.max} value={pick.value} onChange={setRoll} />}
+                    <span className="b-roll-range muted">{opt.min}~{opt.max}</span>
+                    <button className="b-equip go" disabled={full} onClick={() => { onEquipGem(r, opt, pick.value); setPick(null); }}>encaixar</button>
+                  </div>
+                </div>
               )}
             </div>
           );
         })}
       </div>
     </section>
+  );
+}
+
+/* slider de roll (qualidade): um valor dentro de [min,max] da gem */
+function RollSlider({ min, max, value, onChange }) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 100;
+  return (
+    <div className="b-roll">
+      <div className="track" />
+      <div className="fill" style={{ width: pct + "%" }} />
+      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(+e.target.value)} />
+    </div>
   );
 }
 
