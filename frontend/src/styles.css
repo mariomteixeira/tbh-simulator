@@ -1278,46 +1278,58 @@ button.link:hover { color: var(--st-bad); }
 .bd-arrow { color: var(--line-2); }
 .bd-hits { margin-left: auto; }
 
-/* ===== Atributos (stat finder, filtros dinâmicos estilo Builds) ===== */
-.finder-tabs { padding: 10px 0 0; }
-/* seletor de SLOT — driver dinâmico (igual escolher slot no Builds) */
-.finder-slotsel { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
-.slotbtn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--pixel);
-  font-weight: 500; font-size: 1rem; color: var(--dim); background: var(--panel-2);
-  border: 2px solid var(--line); padding: 9px 15px; cursor: pointer; }
-.slotbtn:hover { color: var(--ink); border-color: var(--line-2); }
-.slotbtn .si { width: 16px; height: 16px; border: 2px solid currentColor; flex: none; }
-.slotbtn .c { font-family: var(--mono); font-size: .7rem; opacity: .75; }
-.slotbtn.on { color: var(--bg); background: var(--accent); border-color: var(--accent); box-shadow: 2px 2px 0 var(--shadow); }
-.finder-filters { padding: 14px 16px; background: var(--panel); border: 2px solid var(--line-2);
-  box-shadow: 3px 3px 0 var(--shadow); }
-.afacets { display: flex; flex-direction: column; gap: 10px; }
-.afacet { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.afacet-h { flex: none; min-width: 96px; font-family: var(--label); font-size: .56rem;
-  text-transform: uppercase; letter-spacing: .05em; color: var(--accent); padding-top: 4px; }
-.finder-count { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin: 16px 2px 8px; }
-/* resultados em seções por slot, com ícone */
-.finder-sec { margin-bottom: 20px; }
-.finder-sec-h { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.finder-sec-h .t { font-family: var(--label); font-size: .62rem; letter-spacing: .05em;
-  text-transform: uppercase; color: var(--ink); }
+/* ===== Atributos (stat finder) — filtros estilo wiki + cards ===== */
+.afilters { background: var(--panel); border: 2px solid var(--line-2); box-shadow: 3px 3px 0 var(--shadow); padding: 6px 16px; margin: 12px 0 0; }
+.afrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 0; border-bottom: 2px solid var(--line); }
+.afrow:last-child { border-bottom: 0; }
+.aflabel { display: flex; align-items: center; gap: 8px; flex: none; min-width: 104px;
+  font-family: var(--label); font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.aflabel .gi { width: 12px; height: 12px; border: 2px solid var(--accent-dim); border-radius: 50%; position: relative; }
+.aflabel .gi::after { content: ""; position: absolute; inset: 3px; background: var(--accent-dim); }
+.achips { display: flex; flex-wrap: wrap; gap: 7px; }
+.achip { font-family: var(--mono); font-weight: 600; font-size: .78rem; color: var(--dim);
+  background: var(--bg); border: 2px solid var(--line-2); padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+.achip:hover { color: var(--ink); border-color: var(--dim); }
+.achip:active { transform: translate(1px, 1px); }
+.achip.on { color: var(--bg); background: var(--accent); border-color: var(--accent); box-shadow: 2px 2px 0 var(--shadow); }
+.achip.rchip { color: var(--g); border-color: color-mix(in srgb, var(--g) 45%, var(--line-2)); }
+.achip.rchip:hover { border-color: var(--g); }
+.achip.rchip.on { color: var(--bg); background: var(--g); border-color: var(--g); }
+.lvbox { font-family: var(--mono); font-size: .76rem; color: var(--ink); background: var(--bg); border: 2px solid var(--line-2); padding: 6px 9px; }
+.finder-count { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin: 16px 2px 10px; }
+.finder-sec-h { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.finder-sec-h .t { font-family: var(--label); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--ink); }
 .finder-sec-h .ln { flex: 1; height: 2px; background: var(--line); }
 .finder-sec-h .n { font-family: var(--mono); font-size: .7rem; color: var(--faint); }
-.finder-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-bottom: 2px solid var(--line); }
-.finder-row:hover { background: var(--panel-2); }
-.finder-ico { width: 42px; height: 42px; flex: none; border: 2px solid var(--g, var(--line-2));
+
+/* grid de cards */
+.acard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-bottom: 26px; }
+.acard { position: relative; background: var(--panel); border: 2px solid var(--line-2);
+  box-shadow: 3px 3px 0 var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
+.acard::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--g, var(--line-2)); }
+.acard:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--shadow); }
+.acard-h { display: flex; align-items: flex-start; gap: 11px; padding: 13px 13px 9px; }
+.acard-ico { width: 46px; height: 46px; flex: none; border: 2px solid var(--g, var(--line-2));
   background: var(--panel-3); object-fit: contain; image-rendering: pixelated; }
-.finder-ico.fb { display: inline-flex; align-items: center; justify-content: center;
-  font-family: var(--label); font-size: .62rem; color: var(--g, var(--dim)); }
-.finder-name { font-family: var(--pixel); font-weight: 600; font-size: .95rem; min-width: 150px; }
-.finder-badge { flex: none; font-family: var(--label); font-size: .5rem; text-transform: uppercase;
-  letter-spacing: .04em; padding: 3px 6px; color: var(--bg); }
-.finder-badge.bg-deco { background: var(--accent); }
-.finder-badge.bg-engr { background: var(--el-cold); }
-.finder-badge.bg-inscr { background: var(--el-chaos); }
-.finder-badge.bg-gear { background: var(--faint); }
-.finder-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); margin-left: auto; text-align: right; }
-.finder-tier { font-family: var(--mono); font-size: .76rem; min-width: 48px; text-align: right; }
+.acard-ico.fb { display: inline-flex; align-items: center; justify-content: center; font-family: var(--label); font-size: .6rem; color: var(--g); }
+.acard-id { min-width: 0; }
+.acard-nm { font-family: var(--pixel); font-weight: 600; font-size: 1.02rem; color: var(--g); line-height: 1.05; display: block; }
+.acard-sub { font-family: var(--mono); font-size: .68rem; color: var(--dim); margin-top: 4px; display: block; }
+.acard-tier { margin-left: auto; font-family: var(--mono); font-size: .74rem; color: var(--g); flex: none; }
+.acard-stats { padding: 8px 13px 13px; display: flex; flex-direction: column; gap: 4px; border-top: 2px solid var(--line); }
+.acard-stat { font-family: var(--mono); font-size: .8rem; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; }
+.acard-stat .v { text-align: right; color: var(--ink); }
+.acard-stat.hit { color: var(--ink); }
+.acard-stat.hit .v { color: var(--g); font-weight: 600; }
+
+/* tooltip (hover no card) — detalhe por categoria */
+.finder-tip { position: fixed; z-index: 200; pointer-events: none; width: 300px;
+  background: var(--bg); border: 2px solid var(--accent-dim); box-shadow: 4px 4px 0 var(--shadow); padding: 11px 12px; }
+.finder-tip .tip-name { font-family: var(--pixel); font-weight: 600; font-size: .98rem; }
+.finder-tip .tip-meta { font-family: var(--mono); font-size: .68rem; color: var(--dim); margin: 2px 0 8px; }
+.finder-tip .tip-cat { font-family: var(--label); font-size: .5rem; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin: 7px 0 3px; }
+.finder-tip .tip-stat { font-family: var(--mono); font-size: .76rem; color: var(--ink); }
+.finder-tip .tip-stats { display: flex; flex-direction: column; gap: 2px; }
 
 /* ============================================================ *
  *  Legenda (mockup) + grade chips

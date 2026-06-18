@@ -1,43 +1,51 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { gradeOf } from "../grades.js";
+import { gradeOf, gearPt } from "../grades.js";
 import {
-  statPt, slotPt, catOf, statRange, statText,
-  tierTop, tierLabel, TIER_ORDER, ATTR_GROUPS,
+  statPt, catOf, statRange, statText, valRange, valText, tierTop, tierLabel, TIER_ORDER,
 } from "../gemFormat.js";
 
-const SRC_TABS = [
-  { id: "all", label: "Tudo", cls: "" },
-  { id: "deco", label: "Decoração", cls: "" },
-  { id: "engr", label: "Gravação", cls: "engr" },
-  { id: "inscr", label: "Inscrição", cls: "inscr" },
-  { id: "gear", label: "Equipamento", cls: "" },
-];
-const SLOTS = [["all", "Todos"], ["WEAPON", "Arma"], ["ARMOR", "Armadura"], ["ACCESSORY", "Acessório"]];
-const SLOT_ORDER = ["WEAPON", "ARMOR", "ACCESSORY", "COMMON"];
-const SLOT_LABEL = { WEAPON: "Arma", ARMOR: "Armadura", ACCESSORY: "Acessório", COMMON: "Qualquer slot" };
-const SRC_LABEL = { deco: "Decoração", engr: "Gravação", inscr: "Inscrição", gear: "Equip." };
-const SRC_BADGE = { deco: "bg-deco", engr: "bg-engr", inscr: "bg-inscr", gear: "bg-gear" };
-const CAP = 200;
+const TYPES = [["all", "Todos"], ["weapon", "Arma"], ["offhand", "Off-hand"], ["armor", "Armadura"], ["accessory", "Acessório"]];
+const GEARTYPE_TYPE = {
+  SWORD: "weapon", AXE: "weapon", BOW: "weapon", CROSSBOW: "weapon", SCEPTER: "weapon", STAFF: "weapon", HATCHET: "weapon",
+  SHIELD: "offhand", ORB: "offhand", TOME: "offhand", ARROW: "offhand", BOLT: "offhand",
+  HELMET: "armor", ARMOR: "armor", GLOVES: "armor", BOOTS: "armor",
+  AMULET: "accessory", EARING: "accessory", RING: "accessory", BRACER: "accessory",
+};
+const TYPE_CAT = { weapon: "WEAPON", offhand: "WEAPON", armor: "ARMOR", accessory: "ACCESSORY" };
+const SRC_LABEL = { deco: "Decoração", engr: "Gravação", inscr: "Inscrição" };
+const CAT_PT = { WEAPON: "Arma", ARMOR: "Armadura", ACCESSORY: "Acessório", COMMON: "Qualquer slot" };
+const LVL_MAX = 100;
+const CAP = 120;
 
-/* ícone do item (backend serve /itemicon); cai para tile de iniciais */
 function ItemIco({ k, name, grade }) {
   const [bad, setBad] = useState(false);
   const g = gradeOf(grade);
   if (bad || !k)
-    return <span className="finder-ico fb" style={{ "--g": g.c }}>{(name || "?").slice(0, 2).toUpperCase()}</span>;
-  return <img className="finder-ico" style={{ "--g": g.c }} src={`/itemicon/${k}.png`} alt=""
+    return <span className="acard-ico fb" style={{ "--g": g.c }}>{(name || "?").slice(0, 2).toUpperCase()}</span>;
+  return <img className="acard-ico" style={{ "--g": g.c }} src={`/itemicon/${k}.png`} alt=""
     loading="lazy" onError={() => setBad(true)} />;
+}
+
+function DualRange({ min, max, onChange }) {
+  const lo = ((min - 1) / (LVL_MAX - 1)) * 100, hi = ((max - 1) / (LVL_MAX - 1)) * 100;
+  return (
+    <div className="b-range">
+      <div className="track" /><div className="fill" style={{ left: lo + "%", width: (hi - lo) + "%" }} />
+      <input type="range" min={1} max={LVL_MAX} value={min} onChange={(e) => onChange(Math.min(+e.target.value, max), max)} />
+      <input type="range" min={1} max={LVL_MAX} value={max} onChange={(e) => onChange(min, Math.max(+e.target.value, min))} />
+    </div>
+  );
 }
 
 export default function StatFinderPage({ sim }) {
   const owned = useMemo(() => new Set(sim?.owned || []), [sim]);
   const [catalog, setCatalog] = useState(null);
-  const [src, setSrc] = useState("all");
-  const [slot, setSlot] = useState("all");
+  const [type, setType] = useState("all");
+  const [rarity, setRarity] = useState("all");
   const [attrs, setAttrs] = useState(new Set());
-  const [tiers, setTiers] = useState(new Set());
+  const [lvl, setLvl] = useState([1, LVL_MAX]);
   const [q, setQ] = useState("");
-  const [invOnly, setInvOnly] = useState(false);
+  const [tip, setTip] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -46,183 +54,206 @@ export default function StatFinderPage({ sim }) {
     return () => { alive = false; };
   }, []);
 
-  // entradas planas: 1 por (gema × categoria) + 1 por peça de gear
-  const entries = useMemo(() => {
-    const out = [];
-    if (!catalog) return out;
-    for (const [type, gems] of Object.entries(catalog.gems || {}))
-      for (const g of gems)
+  const { entries, gemByKey } = useMemo(() => {
+    const out = [], gk = {};
+    if (!catalog) return { entries: out, gemByKey: gk };
+    for (const [srcType, gems] of Object.entries(catalog.gems || {}))
+      for (const g of gems) {
+        gk[g.itemKey] = g;
         for (const [cat, opts] of Object.entries(g.groups || {}))
-          out.push({
-            kind: "gem", srcType: type, itemKey: g.itemKey, name: g.name, grade: g.grade,
-            cat, opts, maxTier: opts.reduce((m, o) => Math.max(m, tierTop(o.tier)), 0),
-          });
+          out.push({ kind: "gem", srcType, itemKey: g.itemKey, name: g.name, grade: g.grade,
+            cat, opts, maxTier: opts.reduce((m, o) => Math.max(m, tierTop(o.tier)), 0) });
+      }
     for (const [gearType, items] of Object.entries(catalog.items || {}))
       for (const it of items)
-        out.push({
-          kind: "gear", srcType: "gear", itemKey: it.itemKey, name: it.name, grade: it.grade,
-          gearType, cat: catOf(gearType), level: it.level, lines: it.statLines || [],
-          maxVal: (it.statLines || []).reduce((m, l) => Math.max(m, l.value || 0), 0),
-        });
-    return out;
+        out.push({ kind: "gear", srcType: "gear", itemKey: it.itemKey, name: it.name, grade: it.grade,
+          gearType, cat: catOf(gearType), gtype: GEARTYPE_TYPE[gearType] || "weapon",
+          level: it.level || 0, lines: it.statLines || [],
+          maxVal: (it.statLines || []).reduce((m, l) => Math.max(m, l.value || 0), 0) });
+    return { entries: out, gemByKey: gk };
   }, [catalog]);
 
   const statsOf = (e) => (e.kind === "gem" ? e.opts : e.lines).map((o) => o.stat);
-  // o que existe dado source+slot (pra cascatear os outros filtros)
-  const availFor = (srcV, slotV) => {
-    const ss = new Set(), gs = new Set();
-    for (const e of entries) {
-      if (srcV !== "all" && e.srcType !== srcV) continue;
-      if (slotV !== "all" && e.cat !== "COMMON" && e.cat !== slotV) continue;
-      gs.add(e.grade); statsOf(e).forEach((s) => ss.add(s));
-    }
-    return { ss, gs };
+  const typeMatch = (e, t) => {
+    if (t === "all") return true;
+    if (e.kind === "gem") return e.cat === "COMMON" || e.cat === TYPE_CAT[t];
+    return e.gtype === t;
   };
-  const avail = useMemo(() => availFor(src, slot), [entries, src, slot]);
+  const matchAttr = (e) => statsOf(e).some((s) => attrs.has(s));
 
-  const toggle = (set, setter, v) => { const n = new Set(set); n.has(v) ? n.delete(v) : n.add(v); setter(n); };
-  const prune = (srcV, slotV) => {
-    const { ss, gs } = availFor(srcV, slotV);
-    setAttrs((p) => new Set([...p].filter((a) => ss.has(a))));
-    setTiers((p) => new Set([...p].filter((t) => gs.has(t))));
+  // cascata: raridades dado o tipo; atributos dado tipo+raridade
+  const availGrades = useMemo(() => {
+    const s = new Set(); for (const e of entries) if (typeMatch(e, type)) s.add(e.grade); return s;
+  }, [entries, type]);
+  const availStats = useMemo(() => {
+    const s = new Set();
+    for (const e of entries) if (typeMatch(e, type) && (rarity === "all" || e.grade === rarity)) statsOf(e).forEach((x) => s.add(x));
+    return s;
+  }, [entries, type, rarity]);
+
+  const toggleAttr = (v) => setAttrs((p) => { const n = new Set(p); n.has(v) ? n.delete(v) : n.add(v); return n; });
+  const pickType = (t) => {
+    const ng = new Set(); const ns = new Set();
+    for (const e of entries) if (typeMatch(e, t)) { ng.add(e.grade); }
+    for (const e of entries) if (typeMatch(e, t) && (rarity === "all" || e.grade === rarity)) statsOf(e).forEach((x) => ns.add(x));
+    if (rarity !== "all" && !ng.has(rarity)) setRarity("all");
+    setAttrs((p) => new Set([...p].filter((a) => ns.has(a))));
+    setType(t);
   };
-  const pickSlot = (s) => { prune(src, s); setSlot(s); };
-  const pickSrc = (s) => { prune(s, slot); setSrc(s); };
-  const clearAll = () => { setSrc("all"); setSlot("all"); setAttrs(new Set()); setTiers(new Set()); setQ(""); setInvOnly(false); };
-  const anyFilter = src !== "all" || slot !== "all" || attrs.size || tiers.size || q || invOnly;
+  const pickRarity = (r) => {
+    const ns = new Set();
+    for (const e of entries) if (typeMatch(e, type) && (r === "all" || e.grade === r)) statsOf(e).forEach((x) => ns.add(x));
+    setAttrs((p) => new Set([...p].filter((a) => ns.has(a))));
+    setRarity(r);
+  };
 
   if (!catalog) return <main className="page no-rail"><div className="loading">carregando catálogo…</div></main>;
 
-  const matchAttr = (e) => statsOf(e).some((s) => attrs.has(s));
-  const passes = (e, slotV) => {
-    if (src !== "all" && e.srcType !== src) return false;
-    if (slotV !== "all" && e.cat !== "COMMON" && e.cat !== slotV) return false;
-    if (tiers.size && !tiers.has(e.grade)) return false;
-    if (invOnly && !owned.has(e.itemKey)) return false;
+  const passes = (e) => {
+    if (!typeMatch(e, type)) return false;
+    if (rarity !== "all" && e.grade !== rarity) return false;
     if (attrs.size && !matchAttr(e)) return false;
+    if (e.kind === "gear" && (e.level < lvl[0] || e.level > lvl[1])) return false;
     if (q && !(e.name || "").toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   };
-  const view = entries.filter((e) => passes(e, slot));
+  const view = entries.filter(passes);
   const rank = (g) => TIER_ORDER.indexOf(g);
   view.sort((a, b) => rank(b.grade) - rank(a.grade)
     || (b.maxTier || 0) - (a.maxTier || 0) || (b.maxVal || 0) - (a.maxVal || 0)
     || (a.name || "").localeCompare(b.name || ""));
   const shown = view.slice(0, CAP);
+  const gems = shown.filter((e) => e.kind === "gem");
+  const gear = shown.filter((e) => e.kind === "gear");
 
-  // agrupa por slot-categoria; dentro: gemas antes do gear (já ordenado por grau)
-  const sections = SLOT_ORDER.map((cat) => ({
-    cat,
-    rows: shown.filter((e) => e.cat === cat).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "gem" ? -1 : 1)),
-  })).filter((s) => s.rows.length);
+  const attrChips = [...availStats].sort((a, b) => statPt(a).localeCompare(statPt(b)));
+  const rarChips = TIER_ORDER.filter((g) => availGrades.has(g));
 
-  // facets cascateados
-  const grouped = ATTR_GROUPS.map((g) => ({ ...g, list: g.stats.filter((s) => avail.ss.has(s)) })).filter((g) => g.list.length);
-  const inG = new Set(grouped.flatMap((g) => g.list));
-  const others = [...avail.ss].filter((s) => !inG.has(s)).sort((a, b) => statPt(a).localeCompare(statPt(b)));
-  if (others.length) grouped.push({ key: "other", label: "Outros", list: others });
-  const tierChips = TIER_ORDER.filter((g) => avail.gs.has(g));
+  const tipFor = (node) => ({
+    onMouseMove: (e) => setTip({ x: e.clientX, y: e.clientY, node }),
+    onMouseLeave: () => setTip(null),
+  });
 
-  return (
-    <main className="page no-rail finder">
-      <h1>Atributos</h1>
-      <p className="muted small">
-        Onde cada atributo aparece — gemas (onde dá pra <b>colocar</b>) e equipamentos
-        (onde já vem nativo). Escolha o slot e os filtros cascateiam, igual ao Builds.
-      </p>
-
-      <div className="b-tabs finder-tabs">
-        {SRC_TABS.map((t) => (
-          <button key={t.id} className={"b-tab " + t.cls + (src === t.id ? " active" : "")}
-            onClick={() => pickSrc(t.id)}>{t.label}</button>
-        ))}
-      </div>
-
-      <div className="finder-slotsel">
-        {SLOTS.map(([id, label]) => (
-          <button key={id} className={"slotbtn" + (slot === id ? " on" : "")} onClick={() => pickSlot(id)}>
-            <span className="si" /> {label}
-            <span className="c">·{entries.filter((e) => passes(e, id)).length}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="b-filters finder-filters">
-        <div className="frow">
-          <input className="b-search" placeholder="buscar pelo nome… (ex.: esmeralda, brinco)"
-            value={q} onChange={(e) => setQ(e.target.value)} />
-          <button className={"b-toggle" + (invOnly ? " on" : "")} onClick={() => setInvOnly(!invOnly)}>só inventário</button>
-          {anyFilter ? <button className="b-toggle" onClick={clearAll}>limpar</button> : null}
-        </div>
-        {tierChips.length > 0 && (
-          <div className="frow">
-            <span className="lbl">tier</span>
-            <div className="b-chips">
-              {tierChips.map((gr) => (
-                <button key={gr} className="b-chip tchip" data-on={tiers.has(gr) ? 1 : 0}
-                  style={{ "--g": gradeOf(gr).c }} onClick={() => toggle(tiers, setTiers, gr)}>{gr.slice(0, 4)}</button>
-              ))}
-            </div>
+  const card = (e, i) => {
+    const gr = gradeOf(e.grade);
+    const lines = e.kind === "gem" ? e.opts : e.lines;
+    const sub = e.kind === "gem"
+      ? `${SRC_LABEL[e.srcType]} · ${gr.label}`
+      : `${gearPt(e.gearType)} · Lv${e.level} · ${gr.label}`;
+    return (
+      <div className="acard" key={e.itemKey + "_" + e.cat + "_" + i} style={{ "--g": gr.c }}
+        {...tipFor(<FinderTip e={e} gem={gemByKey[e.itemKey]} />)}>
+        <div className="acard-h">
+          <ItemIco k={e.itemKey} name={e.name} grade={e.grade} />
+          <div className="acard-id">
+            <span className="acard-nm">{e.name}{owned.has(e.itemKey) && <span className="op-tag own">tenho</span>}</span>
+            <span className="acard-sub">{sub}</span>
           </div>
-        )}
-        <div className="afacets">
-          {grouped.map((grp) => (
-            <div className="afacet" key={grp.key}>
-              <span className="afacet-h">{grp.label}</span>
-              <div className="b-chips">
-                {grp.list.map((s) => (
-                  <button key={s} className="b-chip schip" data-on={attrs.has(s) ? 1 : 0}
-                    onClick={() => toggle(attrs, setAttrs, s)}>{statPt(s)}</button>
-                ))}
-              </div>
+          {e.kind === "gem" && <span className="acard-tier">{tierLabel(e.maxTier)}</span>}
+        </div>
+        <div className="acard-stats">
+          {lines.map((l, j) => (
+            <div className={"acard-stat" + (attrs.has(l.stat) ? " hit" : "")} key={j}>
+              <span>{statPt(l.stat)}</span>
+              <span className="v">{e.kind === "gem" ? valRange(l.stat, l.mod, l.min, l.max) : valText(l.stat, l.mod, l.value)}</span>
             </div>
           ))}
         </div>
       </div>
+    );
+  };
 
-      <div className="finder-count">
-        {view.length} resultado{view.length === 1 ? "" : "s"}
-        {view.length > CAP && <span className="muted"> · mostrando {CAP} (refine os filtros)</span>}
+  return (
+    <main className="page no-rail finder">
+      <h1>Atributos</h1>
+
+      <div className="afilters">
+        <Row label="Tipo">
+          {TYPES.map(([id, l]) => (
+            <button key={id} className={"achip" + (type === id ? " on" : "")} onClick={() => pickType(id)}>{l}</button>
+          ))}
+        </Row>
+        <Row label="Raridade">
+          <button className={"achip" + (rarity === "all" ? " on" : "")} onClick={() => pickRarity("all")}>Todas</button>
+          {rarChips.map((g) => (
+            <button key={g} className={"achip rchip" + (rarity === g ? " on" : "")}
+              style={{ "--g": gradeOf(g).c }} onClick={() => pickRarity(g)}>{gradeOf(g).label}</button>
+          ))}
+        </Row>
+        {attrChips.length > 0 && (
+          <Row label="Atributo">
+            {attrChips.map((s) => (
+              <button key={s} className={"achip" + (attrs.has(s) ? " on" : "")} onClick={() => toggleAttr(s)}>{statPt(s)}</button>
+            ))}
+          </Row>
+        )}
+        <Row label="Nível">
+          <span className="lvbox">mín {lvl[0]}</span><span className="lvbox">máx {lvl[1]}</span>
+          <DualRange min={lvl[0]} max={lvl[1]} onChange={(a, b) => setLvl([a, b])} />
+        </Row>
+        <Row label="Buscar">
+          <input className="b-search" placeholder="filtrar pelo nome…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </Row>
       </div>
 
-      {view.length === 0 ? (
-        <div className="b-empty">Nada bate com os filtros.</div>
-      ) : sections.map((sec) => (
-        <div className="finder-sec" key={sec.cat}>
-          <div className="finder-sec-h">
-            <span className="t">{SLOT_LABEL[sec.cat]}</span>
-            <span className="ln" />
-            <span className="n">{sec.rows.length}</span>
-          </div>
-          {sec.rows.map((e, i) => {
-            const gr = gradeOf(e.grade);
-            const sel = e.kind === "gem"
-              ? (attrs.size ? e.opts.filter((o) => attrs.has(o.stat)) : e.opts)
-              : (attrs.size ? e.lines.filter((l) => attrs.has(l.stat)) : e.lines);
-            const f = sel[0];
-            return (
-              <div className="finder-row" key={e.itemKey + "_" + e.cat + "_" + i}>
-                <ItemIco k={e.itemKey} name={e.name} grade={e.grade} />
-                <span className="finder-name" style={{ color: gr.c }}>
-                  {e.name}
-                  {owned.has(e.itemKey) && <span className="op-tag own">tenho</span>}
-                </span>
-                <span className={"finder-badge " + (SRC_BADGE[e.srcType] || "bg-gear")}>
-                  {e.kind === "gear" ? slotPt(e.gearType) : SRC_LABEL[e.srcType]}
-                </span>
-                <span className="finder-val">
-                  {f ? (e.kind === "gem" ? statRange(f.stat, f.mod, f.min, f.max) : statText(f.stat, f.mod, f.value)) : "—"}
-                  {sel.length > 1 && <span className="muted"> +{sel.length - 1}</span>}
-                  {e.kind === "gear" && e.level ? <span className="muted"> · Lv{e.level}</span> : null}
-                </span>
-                <span className="finder-tier" style={{ color: gr.c }}>
-                  {e.kind === "gem" ? tierLabel(f ? f.tier : e.maxTier) : gr.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      <div className="finder-count">{view.length} resultado{view.length === 1 ? "" : "s"}{view.length > CAP && <span className="muted"> · mostrando {CAP}</span>}</div>
+
+      {view.length === 0 && <div className="b-empty">Nada bate com os filtros.</div>}
+      {gems.length > 0 && (
+        <>
+          <div className="finder-sec-h"><span className="t">Gemas</span><span className="ln" /><span className="n">{gems.length}</span></div>
+          <div className="acard-grid">{gems.map(card)}</div>
+        </>
+      )}
+      {gear.length > 0 && (
+        <>
+          <div className="finder-sec-h"><span className="t">Equipamentos</span><span className="ln" /><span className="n">{gear.length}</span></div>
+          <div className="acard-grid">{gear.map(card)}</div>
+        </>
+      )}
+
+      {tip && (
+        <div className="finder-tip" style={{ left: Math.min(tip.x + 16, window.innerWidth - 320), top: Math.min(tip.y + 16, window.innerHeight - 260) }}>{tip.node}</div>
+      )}
     </main>
+  );
+}
+
+function Row({ label, children }) {
+  return (
+    <div className="afrow">
+      <span className="aflabel"><span className="gi" />{label}</span>
+      <div className="achips">{children}</div>
+    </div>
+  );
+}
+
+function FinderTip({ e, gem }) {
+  const gr = gradeOf(e.grade);
+  if (e.kind === "gear") {
+    return (
+      <>
+        <div className="tip-name" style={{ color: gr.c }}>{e.name}</div>
+        <div className="tip-meta">{gearPt(e.gearType)} · {gr.label} · Lv{e.level}</div>
+        <div className="tip-stats">
+          {(e.lines || []).map((l, i) => <div className="tip-stat" key={i}>{statText(l.stat, l.mod, l.value)}</div>)}
+        </div>
+      </>
+    );
+  }
+  const groups = gem?.groups || { [e.cat]: e.opts };
+  return (
+    <>
+      <div className="tip-name" style={{ color: gr.c }}>{e.name}</div>
+      <div className="tip-meta">{SRC_LABEL[e.srcType]} · {gr.label}</div>
+      <div className="tip-stats">
+        {Object.entries(groups).map(([cat, opts]) => (
+          <div key={cat}>
+            <div className="tip-cat">{CAT_PT[cat] || cat}</div>
+            {opts.map((o, i) => <div className="tip-stat" key={i}>{statRange(o.stat, o.mod, o.min, o.max)} · {tierLabel(o.tier)}</div>)}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

@@ -82,6 +82,12 @@ export function statRange(stat, mod, mn, mx) {
   const u = statUnit(stat, mod);
   return `${engName(stat)} +${nfmt(mn, u)}~${nfmt(mx, u)}${u.suf}`;
 }
+/* só o valor (sem o nome do stat) — p/ tabelas com o nome em coluna à parte */
+export const valText = (stat, mod, value) => { const u = statUnit(stat, mod); return `+${nfmt(value, u)}${u.suf}`; };
+export function valRange(stat, mod, mn, mx) {
+  const u = statUnit(stat, mod);
+  return mn === mx ? valText(stat, mod, mn) : `+${nfmt(mn, u)}~${nfmt(mx, u)}${u.suf}`;
+}
 /* grupos de atributo por tipo (p/ o facet da página Atributos) */
 export const ATTR_GROUPS = [
   { key: "offense", label: "Offense", stats: ["AttackDamage", "AttackSpeed", "CastSpeed",
