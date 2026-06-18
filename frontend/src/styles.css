@@ -435,12 +435,12 @@ table.mini.wide td, table.mini.wide th { padding: 6px 10px; font-size: .82rem; }
 table.mini tr.is-current td { background: var(--panel-3); }
 
 /* ---------------- chips ---------------- */
-.chips, .row-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips, .row-chips { display: flex; gap: 7px; flex-wrap: wrap; }
 .chip {
   background: var(--bg); color: var(--dim);
   border: 2px solid var(--line-2);
-  font-family: var(--label); font-size: .58rem; letter-spacing: .04em;
-  padding: 4px 8px; cursor: pointer;
+  font-family: var(--mono); font-weight: 600; font-size: .76rem; letter-spacing: .01em;
+  padding: 6px 12px; cursor: pointer;
 }
 .chip:hover { color: var(--ink); border-color: var(--dim); }
 .chip.active, .chip.on {
@@ -1047,11 +1047,11 @@ button.link:hover { color: var(--st-bad); }
 .cube-chip b { font-family: var(--mono); font-size: .92rem; }
 
 .cube-bar-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
-.cube-tabs { display: flex; gap: 5px; flex-wrap: wrap; flex: 1 1 auto; }
+.cube-tabs { display: flex; gap: 7px; flex-wrap: wrap; flex: 1 1 auto; }
 .cube-tab {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 10px; cursor: pointer;
-  font-family: var(--pixel); font-size: .85rem; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; cursor: pointer;
+  font-family: var(--pixel); font-size: .92rem; font-weight: 500;
   color: var(--dim); white-space: nowrap;
   background: var(--panel); border: 2px solid var(--line);
 }
@@ -1060,14 +1060,14 @@ button.link:hover { color: var(--st-bad); }
   color: var(--bg); border-color: var(--accent); background: var(--accent);
 }
 .cube-tab-n {
-  font-family: var(--mono); font-size: .66rem; color: var(--dim);
-  background: var(--bg); border: 1px solid var(--line); padding: 1px 6px;
+  font-family: var(--mono); font-size: .74rem; color: var(--dim);
+  background: var(--bg); border: 1px solid var(--line); padding: 2px 7px;
 }
 .cube-tab.active .cube-tab-n { color: var(--accent); border-color: var(--accent-dim); background: var(--bg); }
-.cube-toggles { display: flex; gap: 5px; flex-wrap: wrap; }
+.cube-toggles { display: flex; gap: 7px; flex-wrap: wrap; }
 .cube-toggle {
-  padding: 5px 9px; cursor: pointer;
-  font-family: var(--label); font-size: .56rem; letter-spacing: .03em;
+  padding: 6px 12px; cursor: pointer;
+  font-family: var(--mono); font-weight: 600; font-size: .76rem; letter-spacing: .01em;
   color: var(--dim); white-space: nowrap; text-transform: uppercase;
   background: var(--panel); border: 2px solid var(--line);
 }
@@ -1280,7 +1280,7 @@ button.link:hover { color: var(--st-bad); }
 
 /* ===== Atributos (stat finder) ===== */
 .finder-search { max-width: 420px; margin: 6px 0 12px; }
-.finder-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.finder-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px; }
 .finder-out { display: flex; flex-direction: column; gap: 18px; }
 .finder-grp { margin-bottom: 12px; }
 .finder-grp-h { font-family: var(--label); font-size: .6rem; text-transform: uppercase;
@@ -1382,8 +1382,8 @@ button.link:hover { color: var(--st-bad); }
 .ch-item { font-family: var(--pixel); font-weight: 600; font-size: 1.05rem; line-height: 1.1; }
 .b-empty { padding: 26px 16px; text-align: center; color: var(--faint); font-size: .84rem; }
 
-.b-tabs { display: flex; gap: 5px; flex-wrap: wrap; padding: 12px 16px 0; }
-.b-tab { padding: 5px 10px; cursor: pointer; font-family: var(--pixel); font-size: .82rem; font-weight: 500; color: var(--dim); background: var(--panel-2); border: 2px solid var(--line); white-space: nowrap; }
+.b-tabs { display: flex; gap: 7px; flex-wrap: wrap; padding: 12px 16px 0; }
+.b-tab { padding: 8px 14px; cursor: pointer; font-family: var(--pixel); font-size: .92rem; font-weight: 500; color: var(--dim); background: var(--panel-2); border: 2px solid var(--line); white-space: nowrap; }
 .b-tab:hover { color: var(--ink); border-color: var(--line-2); }
 .b-tab.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 .b-tab.engr.active { background: var(--el-cold); border-color: var(--el-cold); }
@@ -1393,13 +1393,13 @@ button.link:hover { color: var(--st-bad); }
 .b-filters { display: flex; flex-direction: column; gap: 11px; padding: 12px 16px; }
 .b-filters .frow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .b-filters .lbl { flex: none; min-width: 48px; }
-.b-search { flex: 1; min-width: 150px; background: var(--bg); color: var(--ink); border: 2px solid var(--line-2); padding: 6px 9px; font-family: var(--mono); font-size: .8rem; }
+.b-search { flex: 1; min-width: 150px; background: var(--bg); color: var(--ink); border: 2px solid var(--line-2); padding: 8px 11px; font-family: var(--mono); font-size: .85rem; }
 .b-search:focus { outline: none; border-color: var(--accent); }
-.b-toggle { padding: 6px 11px; cursor: pointer; font-family: var(--label); font-size: .6rem; letter-spacing: .03em; text-transform: uppercase; color: var(--dim); background: var(--bg); border: 2px solid var(--line-2); }
+.b-toggle { padding: 7px 13px; cursor: pointer; font-family: var(--mono); font-weight: 600; font-size: .76rem; letter-spacing: .01em; text-transform: uppercase; color: var(--dim); background: var(--bg); border: 2px solid var(--line-2); }
 .b-toggle:hover { color: var(--ink); border-color: var(--dim); }
 .b-toggle.on { color: var(--bg); background: var(--el-cold); border-color: var(--el-cold); }
-.b-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.b-chip { padding: 5px 10px; cursor: pointer; font-family: var(--label); font-size: .6rem; letter-spacing: .04em; border: 2px solid var(--line-2); color: var(--dim); background: var(--bg); }
+.b-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.b-chip { padding: 6px 12px; cursor: pointer; font-family: var(--mono); font-weight: 600; font-size: .76rem; letter-spacing: .01em; border: 2px solid var(--line-2); color: var(--dim); background: var(--bg); }
 .b-chip:hover { color: var(--ink); border-color: var(--dim); }
 /* tier: cada grau carrega SUA cor (cor = dado semântico do jogo); preenche ativo */
 .b-chip.tchip { color: var(--g); border-color: color-mix(in srgb, var(--g) 45%, var(--line-2)); }
@@ -1407,6 +1407,14 @@ button.link:hover { color: var(--st-bad); }
 .b-chip.tchip[data-on="1"] { color: var(--bg); background: var(--g); border-color: var(--g); box-shadow: 2px 2px 0 var(--shadow); }
 /* buff: accent */
 .b-chip.schip[data-on="1"] { color: var(--bg); background: var(--accent); border-color: var(--accent); box-shadow: 2px 2px 0 var(--shadow); }
+
+/* feedback tátil consistente nos filtros/toggles (Farm, Cubo, Builds, Atributos) */
+.chip:active, .b-chip:active, .b-toggle:active, .b-tab:active,
+.cube-tab:active, .cube-toggle:active { transform: translate(1px, 1px); }
+@media (prefers-reduced-motion: reduce) {
+  .chip:active, .b-chip:active, .b-toggle:active, .b-tab:active,
+  .cube-tab:active, .cube-toggle:active { transform: none; }
+}
 
 /* tooltip (hover em item/gem/slot) */
 .b-tip {

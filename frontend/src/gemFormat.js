@@ -19,6 +19,13 @@ export const STAT_PT = {
   "PhysicalDamagePercent": "Dano físico", "FireDamagePercent": "Dano fogo",
   "ColdDamagePercent": "Dano gelo", "LightningDamagePercent": "Dano raio",
   "ChaosDamagePercent": "Dano caos", AreaOfEffect: "Área",
+  // rótulos curtos derivados do stat_strings.json oficial (pt-BR)
+  AddAllSkillLevel: "Nível skills", AddHpPerKill: "Cura/kill",
+  BaseAttackCountReduction: "Red. ataque bás.", IncreaseAreaOfEffectDamage: "Dano em área",
+  IncreaseExpAmount: "EXP", IncreaseMeleeDamage: "Dano corpo a corpo",
+  IncreaseProjectileDamage: "Dano projétil", IncreaseSummonDamage: "Dano invocação",
+  Multistrike: "Multigolpe", ProjectileCount: "Qtd. projéteis",
+  SkillDurationIncrease: "Duração skill", SkillRangeExpansion: "Alcance skill",
 };
 export const statPt = (s) => STAT_PT[s] || s;
 
