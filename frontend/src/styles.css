@@ -1280,26 +1280,44 @@ button.link:hover { color: var(--st-bad); }
 
 /* ===== Atributos (stat finder, filtros dinâmicos estilo Builds) ===== */
 .finder-tabs { padding: 10px 0 0; }
+/* seletor de SLOT — driver dinâmico (igual escolher slot no Builds) */
+.finder-slotsel { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.slotbtn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--pixel);
+  font-weight: 500; font-size: 1rem; color: var(--dim); background: var(--panel-2);
+  border: 2px solid var(--line); padding: 9px 15px; cursor: pointer; }
+.slotbtn:hover { color: var(--ink); border-color: var(--line-2); }
+.slotbtn .si { width: 16px; height: 16px; border: 2px solid currentColor; flex: none; }
+.slotbtn .c { font-family: var(--mono); font-size: .7rem; opacity: .75; }
+.slotbtn.on { color: var(--bg); background: var(--accent); border-color: var(--accent); box-shadow: 2px 2px 0 var(--shadow); }
 .finder-filters { padding: 14px 16px; background: var(--panel); border: 2px solid var(--line-2);
-  box-shadow: 3px 3px 0 var(--shadow); margin-top: 12px; }
+  box-shadow: 3px 3px 0 var(--shadow); }
 .afacets { display: flex; flex-direction: column; gap: 10px; }
 .afacet { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .afacet-h { flex: none; min-width: 96px; font-family: var(--label); font-size: .56rem;
   text-transform: uppercase; letter-spacing: .05em; color: var(--accent); padding-top: 4px; }
-.finder-count { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin: 16px 2px 6px; }
-.finder-list { max-height: 620px; }
-.finder-row { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap;
-  padding: 8px 4px; border-bottom: 2px solid var(--line); }
+.finder-count { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin: 16px 2px 8px; }
+/* resultados em seções por slot, com ícone */
+.finder-sec { margin-bottom: 20px; }
+.finder-sec-h { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.finder-sec-h .t { font-family: var(--label); font-size: .62rem; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink); }
+.finder-sec-h .ln { flex: 1; height: 2px; background: var(--line); }
+.finder-sec-h .n { font-family: var(--mono); font-size: .7rem; color: var(--faint); }
+.finder-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-bottom: 2px solid var(--line); }
+.finder-row:hover { background: var(--panel-2); }
+.finder-ico { width: 42px; height: 42px; flex: none; border: 2px solid var(--g, var(--line-2));
+  background: var(--panel-3); object-fit: contain; image-rendering: pixelated; }
+.finder-ico.fb { display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--label); font-size: .62rem; color: var(--g, var(--dim)); }
+.finder-name { font-family: var(--pixel); font-weight: 600; font-size: .95rem; min-width: 150px; }
 .finder-badge { flex: none; font-family: var(--label); font-size: .5rem; text-transform: uppercase;
   letter-spacing: .04em; padding: 3px 6px; color: var(--bg); }
 .finder-badge.bg-deco { background: var(--accent); }
 .finder-badge.bg-engr { background: var(--el-cold); }
 .finder-badge.bg-inscr { background: var(--el-chaos); }
 .finder-badge.bg-gear { background: var(--faint); }
-.finder-name { font-family: var(--pixel); font-weight: 600; font-size: .92rem; }
-.finder-where { font-family: var(--mono); font-size: .72rem; color: var(--faint); }
 .finder-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); margin-left: auto; text-align: right; }
-.finder-tier { font-family: var(--mono); font-size: .74rem; min-width: 48px; text-align: right; }
+.finder-tier { font-family: var(--mono); font-size: .76rem; min-width: 48px; text-align: right; }
 
 /* ============================================================ *
  *  Legenda (mockup) + grade chips
