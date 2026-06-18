@@ -82,6 +82,26 @@ export function statRange(stat, mod, mn, mx) {
   const u = statUnit(stat, mod);
   return `${engName(stat)} +${nfmt(mn, u)}~${nfmt(mx, u)}${u.suf}`;
 }
+/* grupos de atributo por tipo (p/ o facet da página Atributos) */
+export const ATTR_GROUPS = [
+  { key: "offense", label: "Offense", stats: ["AttackDamage", "AttackSpeed", "CastSpeed",
+    "CriticalChance", "CriticalDamage", "AreaOfEffect", "PhysicalDamagePercent",
+    "FireDamagePercent", "ColdDamagePercent", "LightningDamagePercent", "ChaosDamagePercent",
+    "IncreaseAreaOfEffectDamage", "IncreaseMeleeDamage", "IncreaseProjectileDamage",
+    "IncreaseSummonDamage", "Multistrike", "ProjectileCount"] },
+  { key: "defense", label: "Defense", stats: ["MaxHp", "Armor", "BlockChance",
+    "DodgeChance", "ElementalDodgeChance", "DamageAbsorption", "DamageReduction"] },
+  { key: "sustain", label: "Sustain", stats: ["HpRegenPerSec", "AddHpPerHit",
+    "AddHpPerKill", "HpLeech", "SkillHealIncrease"] },
+  { key: "resist", label: "Resistance", stats: ["ChaosResistance", "FireResistance",
+    "ColdResistance", "LightningResistance", "PhysicalResistance", "AllElementalResistance"] },
+  { key: "utility", label: "Utility / Skill", stats: ["CooldownReduction", "MovementSpeed",
+    "AddAllSkillLevel", "SkillDurationIncrease", "SkillRangeExpansion",
+    "BaseAttackCountReduction", "IncreaseExpAmount"] },
+];
+export const TIER_ORDER = ["COMMON", "UNCOMMON", "RARE", "LEGENDARY", "IMMORTAL",
+  "ARCANA", "BEYOND", "CELESTIAL", "DIVINE", "COSMIC"];
+
 /* tier pode ser número (deco/engr) ou faixa [a,b] (inscrição) */
 export const tierTop = (t) => (Array.isArray(t) ? (t[t.length - 1] || 0) : (t || 0));
 export const tierLabel = (t) => (Array.isArray(t) ? `T${t[0]}–${t[t.length - 1]}` : `T${t}`);

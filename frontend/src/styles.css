@@ -1278,25 +1278,28 @@ button.link:hover { color: var(--st-bad); }
 .bd-arrow { color: var(--line-2); }
 .bd-hits { margin-left: auto; }
 
-/* ===== Atributos (stat finder) ===== */
-.finder-search { max-width: 420px; margin: 6px 0 12px; }
-.finder-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px; }
-.finder-out { display: flex; flex-direction: column; gap: 18px; }
-.finder-grp { margin-bottom: 12px; }
-.finder-grp-h { font-family: var(--label); font-size: .6rem; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--dim); padding: 4px 0; border-bottom: 2px solid var(--line); }
-.finder-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  padding: 6px 2px; border-bottom: 2px solid var(--line); }
-.finder-badge { font-family: var(--label); font-size: .5rem; text-transform: uppercase;
-  letter-spacing: .04em; padding: 1px 6px; color: var(--bg); }
+/* ===== Atributos (stat finder, filtros dinâmicos estilo Builds) ===== */
+.finder-tabs { padding: 10px 0 0; }
+.finder-filters { padding: 14px 16px; background: var(--panel); border: 2px solid var(--line-2);
+  box-shadow: 3px 3px 0 var(--shadow); margin-top: 12px; }
+.afacets { display: flex; flex-direction: column; gap: 10px; }
+.afacet { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.afacet-h { flex: none; min-width: 96px; font-family: var(--label); font-size: .56rem;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--accent); padding-top: 4px; }
+.finder-count { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin: 16px 2px 6px; }
+.finder-list { max-height: 620px; }
+.finder-row { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap;
+  padding: 8px 4px; border-bottom: 2px solid var(--line); }
+.finder-badge { flex: none; font-family: var(--label); font-size: .5rem; text-transform: uppercase;
+  letter-spacing: .04em; padding: 3px 6px; color: var(--bg); }
 .finder-badge.bg-deco { background: var(--accent); }
 .finder-badge.bg-engr { background: var(--el-cold); }
 .finder-badge.bg-inscr { background: var(--el-chaos); }
-.finder-name { font-family: var(--pixel); font-weight: 600; font-size: .9rem; }
-.finder-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); margin-left: auto; }
-.finder-tier { font-family: var(--mono); font-size: .74rem; min-width: 42px; text-align: right; }
-.finder-lv { font-family: var(--mono); font-size: .72rem; }
-.finder-more { font-size: .74rem; padding: 5px 2px; }
+.finder-badge.bg-gear { background: var(--faint); }
+.finder-name { font-family: var(--pixel); font-weight: 600; font-size: .92rem; }
+.finder-where { font-family: var(--mono); font-size: .72rem; color: var(--faint); }
+.finder-val { font-family: var(--mono); font-size: .8rem; color: var(--ink); margin-left: auto; text-align: right; }
+.finder-tier { font-family: var(--mono); font-size: .74rem; min-width: 48px; text-align: right; }
 
 /* ============================================================ *
  *  Legenda (mockup) + grade chips
