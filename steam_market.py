@@ -167,24 +167,26 @@ def market_panel(gd, save, cache, lang="en"):
     keep = 1 - STEAM_FEE
     by_uid = {it.get("UniqueId"): it for it in save.get("itemSaveDatas") or []}
 
-    # 1ª passada: descobre os itens marketáveis e seus nomes de mercado
-    owned = []   # (uid, item, en, hash_name)
+    # 1ª passada: todos os itens (na ordem nativa, igual cubo) + nomes de mercado
+    # só dos negociáveis (esses é que vão pra busca de preço)
+    owned = []   # (uid, item, en, hash_name, marketable)
     names = []
     for key in ("inventorySaveDatas", "stashSaveDatas", "tradingStashSaveDatas"):
         for s in save.get(key) or []:
             uid = s.get("ItemUniqueId")
             it = by_uid.get(uid)
             item = gd.items.get(it.get("ItemKey")) if it else None
-            if not item or not item.get("marketable"):
+            if not item:
                 continue
+            mk = bool(item.get("marketable"))
             en = _en_name(item)
-            hn = market_hash_name(item, en)
-            owned.append((uid, item, en, hn))
+            hn = market_hash_name(item, en) if mk else None
+            owned.append((uid, item, en, hn, mk))
             if hn:
                 names.append(hn)
     cache.request(names)   # dispara as buscas que faltam
 
-    def entry(uid, item, en, hn):
+    def entry(uid, item, en, hn, mk):
         p = cache.get(hn) if hn else None
         priced = bool(p and p.get("success") and p.get("cents") is not None)
         listed = p.get("cents") if priced else None
@@ -197,26 +199,28 @@ def market_panel(gd, save, cache, lang="en"):
             "type": item.get("type"),
             "gear": item.get("gear"),
             "level": item.get("level"),
+            "marketable": mk,
             "listed": listed,
             "listedText": p.get("text") if priced else None,
             "receive": round(listed * keep) if listed else None,
             "matched": priced,
-            "pending": p is None,                 # ainda buscando o preço
+            "pending": bool(mk and p is None),    # buscando o preço (só negociável)
         }
 
-    rows = {uid: entry(uid, item, en, hn) for uid, item, en, hn in owned}
+    rows = {uid: entry(uid, item, en, hn, mk) for uid, item, en, hn, mk in owned}
     containers = []
     for cid, label, key in (("inventory", "Inventário", "inventorySaveDatas"),
                             ("stash", "Stash", "stashSaveDatas"),
                             ("trading", "Stash de troca", "tradingStashSaveDatas")):
         slots = [rows.get(s.get("ItemUniqueId")) for s in (save.get(key) or [])]
-        mk = [e for e in slots if e]
+        items = [e for e in slots if e]
         containers.append({
             "id": cid, "label": label, "slots": slots,
-            "filled": len(mk),
-            "matched": sum(1 for e in mk if e["matched"]),
-            "pending": sum(1 for e in mk if e["pending"]),
-            "sumReceive": sum(e["receive"] or 0 for e in mk),
+            "filled": len(items),
+            "tradable": sum(1 for e in items if e["marketable"]),
+            "matched": sum(1 for e in items if e["matched"]),
+            "pending": sum(1 for e in items if e["pending"]),
+            "sumReceive": sum(e["receive"] or 0 for e in items),
         })
     return {
         "appid": STEAM_APPID,

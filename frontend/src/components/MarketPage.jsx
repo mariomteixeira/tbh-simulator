@@ -56,7 +56,11 @@ function Detail({ e, fee, cooldown, appid }) {
         </div>
       </div>
 
-      {e.matched ? (
+      {!e.marketable ? (
+        <p className="muted small" style={{ marginTop: 12 }}>
+          {t("Not tradable on the Steam Market.", "Não negociável no Steam Market.")}
+        </p>
+      ) : e.matched ? (
         <>
           <div className="cube-rows">
             <div className="cube-row">
@@ -99,6 +103,7 @@ export default function MarketPage() {
   const [cid, setCid] = useState("stash");
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState(null);
+  const [sortVal, setSortVal] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -117,12 +122,9 @@ export default function MarketPage() {
 
   const slots = useMemo(() => {
     if (!cont) return [];
-    return [...cont.slots].sort((a, b) => {
-      if (!a) return 1;
-      if (!b) return -1;
-      return (b.receive || 0) - (a.receive || 0); // mais valioso primeiro
-    });
-  }, [cont]);
+    if (!sortVal) return cont.slots; // ordem nativa (igual cubo) — cada página = 1 aba do stash
+    return cont.slots.filter(Boolean).sort((a, b) => (b.receive || 0) - (a.receive || 0));
+  }, [cont, sortVal]);
 
   if (!data && !err)
     return <main className="page no-rail"><div className="loading">{t("loading…", "carregando…")}</div></main>;
@@ -152,11 +154,19 @@ export default function MarketPage() {
                 </button>
               ))}
             </div>
+            <div className="cube-toggles">
+              <button
+                className={"cube-toggle" + (sortVal ? " on" : "")}
+                onClick={() => { setSortVal((v) => !v); setPage(0); }}
+              >
+                {t("sort by value", "ordenar por valor")}
+              </button>
+            </div>
           </div>
 
           {cont && (
             <div className="cube-sub muted small">
-              {cont.matched}/{cont.filled} {t("priced", "com preço")} ·{" "}
+              {cont.matched}/{cont.tradable} {t("priced", "com preço")} ·{" "}
               <span className="v-gold">{brl(cont.sumReceive)}</span> {t("if you sell all", "vendendo tudo")}
               {cont.pending > 0 && <span className="muted"> · {cont.pending} {t("loading…", "carregando…")}</span>}
             </div>

@@ -106,12 +106,14 @@ def test_market_panel_priced_and_pending():
     assert panel["feePct"] == 30 and panel["cooldownHours"] == 8
     assert "Dimensional Boots (Legendary) A" in cache.requested
     assert "Minor Ruby" in cache.requested
+    assert "Bound" not in cache.requested          # não-negociável não vai pra busca
     stash = next(c for c in panel["containers"] if c["id"] == "stash")
     items = {e["key"]: e for e in stash["slots"] if e}
-    assert len(items) == 2                         # non-marketable excluded
+    assert len(items) == 3                          # todos os itens aparecem (ordem nativa)
 
     ruby = items[110001]
     assert ruby["name"] == "Rubi Menor"            # display name em pt
+    assert ruby["marketable"] is True
     assert ruby["listed"] == 90 and ruby["receive"] == 63
     assert ruby["matched"] is True and ruby["pending"] is False
 
@@ -119,6 +121,11 @@ def test_market_panel_priced_and_pending():
     assert boots["hashName"] == "Dimensional Boots (Legendary) A"
     assert boots["matched"] is False and boots["pending"] is True
 
+    bound = items[110002]                           # não-negociável: aparece, sem preço
+    assert bound["marketable"] is False
+    assert bound["matched"] is False and bound["pending"] is False and bound["listed"] is None
+
+    assert stash["filled"] == 3 and stash["tradable"] == 2
     assert stash["matched"] == 1 and stash["pending"] == 1 and stash["sumReceive"] == 63
 
 
