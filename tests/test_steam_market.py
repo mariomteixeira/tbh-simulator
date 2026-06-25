@@ -68,6 +68,30 @@ def test_price_cache_never_discards_on_429():
         assert c.get("X")["cents"] == 226            # preço bom preservado
 
 
+def test_price_cache_circuit_breaker_pauses_on_repeated_429():
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "p.json"
+        clock = [1000.0]
+        class _429(Exception):
+            code = 429
+        def boom(name, appid, currency):
+            raise _429("429")
+        c = sm.PriceCache(path, interval=0, backoff=0, max_429=3, cooldown=500,
+                          fetch=boom, now=lambda: clock[0])
+        c.request(["A", "B", "C", "D", "E"])
+        if c._worker:
+            c._worker.join(timeout=5)
+        assert c._pause_until == 1000.0 + 500          # pausou após 3 429s seguidos
+        prev = c._worker
+        c.request(["A"])                                # durante a pausa: não bate na Steam
+        assert c._worker is prev
+
+        clock[0] = 1000.0 + 600                         # passou o cooldown
+        c._fetch = lambda n, a, cur: {"success": True, "cents": 50}
+        c.request(["A"]); c._worker.join(timeout=5)
+        assert c.get("A")["cents"] == 50               # volta a funcionar sozinho
+
+
 def test_price_cache_no_listing_recorded():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "p.json"

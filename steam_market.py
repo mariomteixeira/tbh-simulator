@@ -95,6 +95,7 @@ class PriceCache:
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
                  ttl=20 * 60, fail_ttl=20 * 60, interval=6.0, backoff=60,
+                 max_429=5, cooldown=15 * 60,
                  fetch=_fetch_priceoverview, now=time.time):
         self.path = Path(path)
         self.appid = appid
@@ -103,6 +104,8 @@ class PriceCache:
         self.fail_ttl = fail_ttl    # re-tenta "sem listagem" a cada 20min
         self.interval = interval    # 6s -> teto ~10 req/min
         self.backoff = backoff      # pausa após 429
+        self.max_429 = max_429      # 429s seguidos antes de pausar tudo
+        self.cooldown = cooldown    # quanto tempo o circuit breaker pausa
         self._fetch = fetch
         self._now = now
         self._lock = threading.Lock()
@@ -110,6 +113,7 @@ class PriceCache:
         self._queued = set()
         self._q = queue.Queue()
         self._worker = None
+        self._pause_until = 0            # circuit breaker: não busca enquanto > now
 
     def _load(self):
         try:
@@ -143,6 +147,8 @@ class PriceCache:
         """Enfileira os nomes que precisam buscar/revalidar."""
         start = False
         with self._lock:
+            if self._now() < self._pause_until:   # circuit breaker ativo: não bate na Steam
+                return
             for n in names:
                 if not n or n in self._queued or not self._needs_refresh(n):
                     continue
@@ -155,6 +161,7 @@ class PriceCache:
             self._worker.start()
 
     def _run(self):
+        consec_429 = 0
         while True:
             try:
                 name = self._q.get_nowait()
@@ -167,12 +174,18 @@ class PriceCache:
                 # _needs_refresh continua True, então o próximo request() re-tenta.
                 with self._lock:
                     self._queued.discard(name)
-                code = getattr(e, "code", None)
-                if code == 429:
+                if getattr(e, "code", None) == 429:
+                    consec_429 += 1
+                    if consec_429 >= self.max_429:
+                        # circuit breaker: para tudo e pausa, pra não fritar o IP
+                        with self._lock:
+                            self._pause_until = self._now() + self.cooldown
+                        return
                     time.sleep(self.backoff)
                 else:
                     time.sleep(self.interval)
                 continue
+            consec_429 = 0
             with self._lock:
                 if res.get("success") and res.get("cents") is not None:
                     self._data[name] = {**res, "ts": self._now()}      # preço bom
