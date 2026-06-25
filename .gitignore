@@ -39,3 +39,6 @@ __pycache__/
 .idea/
 .venv/
 venv/
+
+# Docs locais da skill (spec/plano) — nao versionar.
+/docs/superpowers/
