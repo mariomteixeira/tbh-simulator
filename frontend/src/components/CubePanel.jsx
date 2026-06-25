@@ -1,32 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { fmt } from "../format.js";
-import { gradeOf, gearPt } from "../grades.js";
+import { gradeOf } from "../grades.js";
 import { useT } from "../i18n.jsx";
+import ItemIcon, { typeLabel } from "./ItemIcon.jsx";
 
-const typeLabel = (e) =>
-  e.type === "GEAR" ? gearPt(e.gear) || e.gear : e.type === "MATERIAL" ? "Material" : e.type;
 const PAGE = 49; // stash do jogo é 7×7
-
-function ItemIcon({ e, size = 40 }) {
-  const [bad, setBad] = useState(false);
-  const g = gradeOf(e.grade);
-  if (bad || !e.key)
-    return (
-      <span className="cube-ico-fallback" style={{ width: size, height: size, color: g.c }}>
-        {typeLabel(e).slice(0, 2)}
-      </span>
-    );
-  return (
-    <img
-      className="cube-ico"
-      style={{ width: size, height: size }}
-      src={`/itemicon/${e.key}.png`}
-      alt=""
-      loading="lazy"
-      onError={() => setBad(true)}
-    />
-  );
-}
 
 function Cell({ e, selected, onClick }) {
   if (!e) return <div className="cube-cell empty" />;

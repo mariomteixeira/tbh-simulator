@@ -1568,3 +1568,12 @@ button.link:hover { color: var(--st-bad); }
 
 @media (max-width: 1080px) { .builds-page .editor { grid-template-columns: 1fr; } .builds-page .card { position: static; } }
 @media (max-width: 940px) { .builds-page .statlist { grid-template-columns: 1fr; } }
+
+/* Market: preço na célula + link da Steam (reusa o layout do cubo) */
+.mk-price { color: var(--gold); font-variant-numeric: tabular-nums; }
+.cube-cell.locked .mk-price { color: var(--muted); }
+.mk-link {
+  display: inline-block; margin-top: 12px; font-size: 12px;
+  color: var(--accent); text-decoration: none;
+}
+.mk-link:hover { text-decoration: underline; }

@@ -11,6 +11,7 @@ import OfflinePanel from "./components/OfflinePanel.jsx";
 import BoxPanel from "./components/BoxPanel.jsx";
 import RunesPage from "./components/RunesPage.jsx";
 import CubePanel from "./components/CubePanel.jsx";
+import MarketPage from "./components/MarketPage.jsx";
 import BuildsPage from "./components/BuildsPage.jsx";
 import StatFinderPage from "./components/StatFinderPage.jsx";
 import { useT, useLang, tr, ratingLabel } from "./i18n.jsx";
@@ -24,6 +25,7 @@ const ROUTES = [
   { id: "runes", hash: "#/runas", label: "Runes", pt: "Runas", group: "panel", icon: "i-rune" },
   { id: "heroes", hash: "#/herois", label: "Heroes & Gear", pt: "Heróis & Gear", group: "panel", icon: "i-hero" },
   { id: "offline", hash: "#/offline", label: "Offline", pt: "Offline", group: "panel", icon: "i-off" },
+  { id: "market", hash: "#/market", label: "Market", pt: "Mercado", group: "panel", icon: "i-market" },
   { id: "model", hash: "#/modelo", label: "Calibration", pt: "Calibração", group: "system", icon: "i-model" },
 ];
 const GROUP_PT = { panel: "Painel", system: "Sistema" };
@@ -64,6 +66,11 @@ function NavIcons() {
         </g>
         <g id="i-off">
           <path d="M10 2a6 6 0 1 0 0 12 7 7 0 0 1 0-12z" />
+        </g>
+        <g id="i-market">
+          <path d="M3 9h10l-1 3H4z" />
+          <rect x="7" y="2" width="2" height="7" />
+          <path d="M9 3h4l-1 3H9z" />
         </g>
         <g id="i-model">
           <rect x="3" y="3" width="2" height="10" />
@@ -377,6 +384,8 @@ export default function App() {
           <StatFinderPage key="stats" sim={sim} />
         ) : route.id === "cube" ? (
           <CubePanel key="cube" alchemy={sim?.alchemy} />
+        ) : route.id === "market" ? (
+          <MarketPage key="market" />
         ) : (
           <main
             key={route.id}
