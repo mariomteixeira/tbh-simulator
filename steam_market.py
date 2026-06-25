@@ -88,14 +88,14 @@ class PriceCache:
     em background que busca um item por vez (espaçado) pra não tomar 429."""
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
-                 ttl=6 * 3600, miss_ttl=6 * 3600, fail_ttl=120, interval=3.0,
+                 ttl=15 * 60, miss_ttl=15 * 60, fail_ttl=120, interval=3.0,
                  fetch=_fetch_priceoverview, now=time.time):
         self.path = Path(path)
         self.appid = appid
         self.currency = currency
-        self.ttl = ttl              # tem preço: revalida em ttl
-        self.miss_ttl = miss_ttl    # sem listagem (resposta definitiva): cacheia bastante
-        self.fail_ttl = fail_ttl    # erro de rede/429 (transitório): re-tenta logo
+        self.ttl = ttl              # tem preço: revalida a cada 15min
+        self.miss_ttl = miss_ttl    # sem listagem: re-checa a cada 15min
+        self.fail_ttl = fail_ttl    # erro de rede/429 (transitório): re-tenta em 2min
         self.interval = interval
         self._fetch = fetch
         self._now = now
