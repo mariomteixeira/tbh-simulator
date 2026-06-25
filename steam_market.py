@@ -1,26 +1,28 @@
 """Preços do Steam Community Market para a página Mercado.
 
-Estratégia: buscar o preço só dos itens que o jogador TEM (não os ~741 do
-mercado), via endpoint priceoverview por item (que respeita currency=7 → BRL de
-forma confiável, sem o fallback pra USD do search/render). Um worker em
-background espaça as requisições (~3s) pra não tomar 429, e o resultado é
-cacheado em disco. Sem dependências externas (urllib stdlib).
+Estratégia: UM sweep em lote do mercado inteiro (endpoint search/render) com
+`country=BR` — que é o único jeito de vir tudo em BRL de forma confiável (sem
+country a moeda oscila entre R$ e US$ na mesma resposta; o priceoverview por
+item é confiável mas toma 429 com dezenas de itens). O sweep roda em background,
+salva incrementalmente em disco e NUNCA descarta um preço já conhecido (falha
+parcial/429 mantém o que já tem). TTL 15min. Sem dependências externas.
 
-Nome de mercado:
-- materiais/gems/soulstones/coins: o próprio nome inglês ("Twilight Amethyst").
-- gear: "Base (Grade) Sufixo" — ex.: "Dimensional Boots (Legendary) A". O sufixo
-  atual é sempre "A" (único tier negociável); construímos esse nome.
+Casamento item -> preço:
+- material/gem/soulstone/coin: nome inglês exato ("Twilight Amethyst").
+- gear: nome de mercado é "Base (Grade) Sufixo" (ex.: "Dimensional Boots
+  (Legendary) A"); casa por prefixo "Base (Grade)" e pega o de menor preço.
 """
 import json
-import queue
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 STEAM_APPID = 3678970
 CURRENCY_BRL = 7
+COUNTRY_BR = "BR"                # força BRL consistente no render
 STEAM_FEE = 0.30                 # taxa da Steam (definido pelo usuário)
 TRADESHIP_COOLDOWN_HOURS = 8     # cooldown do tradeship (definido pelo usuário)
 
@@ -32,16 +34,154 @@ def normalize_name(s):
     return " ".join((s or "").strip().lower().split())
 
 
-def parse_price_brl(text):
-    """'R$ 1.234,56' -> 123456 (centavos). None se não der pra ler."""
-    if not text:
+def parse_render_page(obj):
+    """[{hash_name, sell_price(centavos|None), sell_price_text}], total_count."""
+    out = []
+    for r in (obj or {}).get("results") or []:
+        name = r.get("hash_name") or r.get("name")
+        if not name:
+            continue
+        out.append({
+            "hash_name": name,
+            "sell_price": r.get("sell_price"),
+            "sell_price_text": r.get("sell_price_text"),
+        })
+    return out, (obj or {}).get("total_count") or 0
+
+
+def _fetch_page(appid, currency, start, count, country=COUNTRY_BR):
+    qs = urllib.parse.urlencode({"appid": appid, "norender": 1,
+                                 "start": start, "count": count,
+                                 "currency": currency, "country": country})
+    url = "https://steamcommunity.com/market/search/render/?" + qs
+    req = urllib.request.Request(url, headers=_UA)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+class MarketCache:
+    """Mapa normalized_hash_name -> {hash_name, cents, text}, alimentado por um
+    sweep em background do mercado inteiro. Persistido em disco; nunca descarta
+    preço conhecido."""
+
+    def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
+                 country=COUNTRY_BR, ttl=15 * 60, interval=1.5, count=100,
+                 fetch=_fetch_page, now=time.time):
+        self.path = Path(path)
+        self.appid = appid
+        self.currency = currency
+        self.country = country
+        self.ttl = ttl
+        self.interval = interval
+        self.count = count
+        self._fetch = fetch
+        self._now = now
+        self._lock = threading.Lock()
+        self._prices, self._updated = self._load()
+        self._sweeping = False
+        self._progress = (0, 0)         # (baixados, total) do sweep atual
+        self._worker = None
+
+    def _load(self):
+        try:
+            d = json.loads(self.path.read_text(encoding="utf-8"))
+            return d.get("prices") or {}, d.get("updatedAt", 0)
+        except (FileNotFoundError, ValueError):
+            return {}, 0
+
+    def _save(self):
+        try:
+            self.path.write_text(json.dumps({
+                "updatedAt": self._updated, "prices": self._prices,
+            }), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _fresh(self):
+        return bool(self._prices) and (self._now() - self._updated) < self.ttl
+
+    def prices(self):
+        with self._lock:
+            return dict(self._prices)
+
+    def loading(self):
+        with self._lock:
+            return self._sweeping
+
+    def meta(self):
+        with self._lock:
+            return {"updatedAt": self._updated, "have": len(self._prices),
+                    "loading": self._sweeping, "progress": self._progress,
+                    "stale": not self._fresh()}
+
+    def ensure(self):
+        """Dispara um sweep em background se estiver vencido e nenhum em curso."""
+        with self._lock:
+            if self._sweeping or self._fresh():
+                return
+            self._sweeping = True
+        self._worker = threading.Thread(target=self._run, daemon=True)
+        self._worker.start()
+
+    def _run(self):
+        start, total, retries = 0, 0, 0
+        try:
+            while True:
+                try:
+                    page = self._fetch(self.appid, self.currency, start,
+                                       self.count, self.country)
+                except urllib.error.HTTPError as e:
+                    if e.code == 429 and retries < 8:
+                        retries += 1
+                        time.sleep(30)        # 429: recua e re-tenta a mesma página
+                        continue
+                    break                     # outro erro/desiste: mantém o que tem
+                except Exception:
+                    break
+                retries = 0
+                rows, total = parse_render_page(page)
+                if not rows:
+                    break
+                with self._lock:
+                    for e in rows:
+                        text = e.get("sell_price_text") or ""
+                        if text.strip().startswith("$"):
+                            continue          # defensivo: ignora linha em USD
+                        self._prices[normalize_name(e["hash_name"])] = {
+                            "hash_name": e["hash_name"],
+                            "cents": e.get("sell_price"),
+                            "text": text,
+                        }
+                    self._progress = (start + len(rows), total)
+                    self._save()              # incremental: progresso aparece já
+                start += len(rows)
+                if total and start >= total:
+                    break
+                if self.interval:
+                    time.sleep(self.interval)
+        finally:
+            with self._lock:
+                self._updated = self._now()
+                self._sweeping = False
+                self._save()
+
+
+def find_price(prices, item, en):
+    """Preço de um item no mapa do mercado. Exato pelo nome inglês; pra GEAR
+    casa por prefixo "Base (Grade)" (sufixo A/B/…) pegando o de menor preço."""
+    if not en:
         return None
-    s = (text.replace("R$", "").replace("\xa0", "").strip()
-         .replace(".", "").replace(",", "."))
-    try:
-        return round(float(s) * 100)
-    except ValueError:
-        return None
+    p = prices.get(normalize_name(en))
+    if p:
+        return p
+    grade = item.get("grade")
+    if grade and item.get("gear"):
+        pref = normalize_name(f"{en} ({grade})") + " "
+        cands = [v for k, v in prices.items() if k.startswith(pref)]
+        if cands:
+            return min(cands, key=lambda v: v["cents"]
+                       if v.get("cents") is not None else float("inf"))
+    return None
 
 
 def _en_name(item):
@@ -54,123 +194,9 @@ def _disp_name(item, lang_code):
     return n.get(lang_code) or n.get("en-US") or next(iter(n.values()), None)
 
 
-def market_hash_name(item, en=None):
-    """Nome de mercado do item (market_hash_name). Gear leva (Grade) + sufixo A."""
-    en = en or _en_name(item)
-    if not en:
-        return None
-    grade = item.get("grade")
-    if item.get("gear") and grade:
-        return f"{en} ({grade.title()}) A"
-    return en
-
-
-def _fetch_priceoverview(hash_name, appid=STEAM_APPID, currency=CURRENCY_BRL):
-    qs = urllib.parse.urlencode({"appid": appid, "currency": currency,
-                                 "market_hash_name": hash_name})
-    url = "https://steamcommunity.com/market/priceoverview/?" + qs
-    req = urllib.request.Request(url, headers=_UA)
-    with urllib.request.urlopen(req, timeout=20) as r:
-        d = json.loads(r.read().decode("utf-8"))
-    if not d.get("success"):
-        return {"success": False}
-    return {
-        "success": True,
-        "cents": parse_price_brl(d.get("lowest_price")),
-        "text": d.get("lowest_price"),
-        "median_cents": parse_price_brl(d.get("median_price")),
-        "volume": d.get("volume"),
-    }
-
-
-class PriceCache:
-    """Cache em disco de preços por market_hash_name, alimentado por um worker
-    em background que busca um item por vez (espaçado) pra não tomar 429."""
-
-    def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
-                 ttl=15 * 60, miss_ttl=15 * 60, fail_ttl=120, interval=3.0,
-                 fetch=_fetch_priceoverview, now=time.time):
-        self.path = Path(path)
-        self.appid = appid
-        self.currency = currency
-        self.ttl = ttl              # tem preço: revalida a cada 15min
-        self.miss_ttl = miss_ttl    # sem listagem: re-checa a cada 15min
-        self.fail_ttl = fail_ttl    # erro de rede/429 (transitório): re-tenta em 2min
-        self.interval = interval
-        self._fetch = fetch
-        self._now = now
-        self._lock = threading.Lock()
-        self._data = self._load()        # {hash_name: {success, cents, ..., ts}}
-        self._queued = set()
-        self._q = queue.Queue()
-        self._worker = None
-
-    def _load(self):
-        try:
-            return json.loads(self.path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, ValueError):
-            return {}
-
-    def _save(self):
-        try:
-            self.path.write_text(json.dumps(self._data), encoding="utf-8")
-        except OSError:
-            pass
-
-    def _fresh(self, e):
-        if not e:
-            return False
-        if e.get("success"):
-            ttl = self.ttl
-        elif e.get("error"):           # rede/429 — transitório, re-tenta logo
-            ttl = self.fail_ttl
-        else:                          # Steam disse "sem listagem" — cacheia bastante
-            ttl = self.miss_ttl
-        return (self._now() - e.get("ts", 0)) < ttl
-
-    def get(self, name):
-        """Entry fresca (ou None se ausente/vencida/ainda na fila)."""
-        with self._lock:
-            e = self._data.get(name)
-            return dict(e) if self._fresh(e) else None
-
-    def request(self, names):
-        """Enfileira pra buscar os nomes ainda não frescos."""
-        start = False
-        with self._lock:
-            for n in names:
-                if not n or n in self._queued or self._fresh(self._data.get(n)):
-                    continue
-                self._queued.add(n)
-                self._q.put(n)
-            if self._queued and (self._worker is None or not self._worker.is_alive()):
-                self._worker = threading.Thread(target=self._run, daemon=True)
-                start = True
-        if start:
-            self._worker.start()
-
-    def _run(self):
-        while True:
-            try:
-                name = self._q.get_nowait()
-            except queue.Empty:
-                return
-            try:
-                res = self._fetch(name, self.appid, self.currency)
-            except Exception:
-                res = {"success": False, "error": True}   # transitório (rede/429)
-            with self._lock:
-                self._data[name] = {**res, "ts": self._now()}
-                self._queued.discard(name)
-                self._save()
-            if self.interval:
-                time.sleep(self.interval)
-
-
 def _iter_owned(gd, save):
     """Itera os itens do inventário/stash/trading (ordem nativa, igual cubo),
-    rendendo (uid, item, en_name, hash_name, marketable). hash_name só nos
-    negociáveis (os outros = None)."""
+    rendendo (uid, item, en_name, marketable)."""
     by_uid = {it.get("UniqueId"): it for it in save.get("itemSaveDatas") or []}
     for key in ("inventorySaveDatas", "stashSaveDatas", "tradingStashSaveDatas"):
         for s in save.get(key) or []:
@@ -179,36 +205,26 @@ def _iter_owned(gd, save):
             item = gd.items.get(it.get("ItemKey")) if it else None
             if not item:
                 continue
-            mk = bool(item.get("marketable"))
-            en = _en_name(item)
-            hn = market_hash_name(item, en) if mk else None
-            yield uid, item, en, hn, mk
-
-
-def owned_market_names(gd, save):
-    """Nomes de mercado dos itens negociáveis que o jogador tem (p/ aquecer o
-    cache em background, sem precisar abrir a página)."""
-    return [hn for _, _, _, hn, mk in _iter_owned(gd, save) if hn]
+            yield uid, item, _en_name(item), bool(item.get("marketable"))
 
 
 def market_panel(gd, save, cache, lang="en"):
-    """Itens marketáveis do inventário/stash/trading com valor de Steam."""
+    """Itens do inventário/stash/trading com valor de Steam (BRL)."""
     lang_code = {"pt": "pt-BR", "en": "en-US"}.get(lang, "en-US")
     keep = 1 - STEAM_FEE
+    cache.ensure()                       # garante o sweep em background
+    prices = cache.prices()
+    loading = cache.loading()
 
-    # todos os itens (na ordem nativa); nomes de mercado só dos negociáveis
-    owned = list(_iter_owned(gd, save))
-    cache.request([hn for _, _, _, hn, _ in owned if hn])   # dispara as buscas que faltam
-
-    def entry(uid, item, en, hn, mk):
-        p = cache.get(hn) if hn else None
-        priced = bool(p and p.get("success") and p.get("cents") is not None)
-        listed = p.get("cents") if priced else None
+    def entry(uid, item, en, mk):
+        p = find_price(prices, item, en) if mk else None
+        listed = p.get("cents") if p else None
+        priced = listed is not None
         return {
             "uid": str(uid),
             "key": item["id"],
             "name": _disp_name(item, lang_code),
-            "hashName": hn,
+            "hashName": p.get("hash_name") if p else None,
             "grade": item.get("grade"),
             "type": item.get("type"),
             "gear": item.get("gear"),
@@ -216,12 +232,12 @@ def market_panel(gd, save, cache, lang="en"):
             "marketable": mk,
             "listed": listed,
             "listedText": p.get("text") if priced else None,
-            "receive": round(listed * keep) if listed else None,
+            "receive": round(listed * keep) if priced else None,
             "matched": priced,
-            "pending": bool(mk and p is None),    # buscando o preço (só negociável)
+            "pending": bool(mk and not priced and loading),  # ainda carregando o mercado
         }
 
-    rows = {uid: entry(uid, item, en, hn, mk) for uid, item, en, hn, mk in owned}
+    rows = {uid: entry(uid, item, en, mk) for uid, item, en, mk in _iter_owned(gd, save)}
     containers = []
     for cid, label, key in (("inventory", "Inventário", "inventorySaveDatas"),
                             ("stash", "Stash", "stashSaveDatas"),
@@ -240,5 +256,6 @@ def market_panel(gd, save, cache, lang="en"):
         "appid": STEAM_APPID,
         "feePct": round(STEAM_FEE * 100),
         "cooldownHours": TRADESHIP_COOLDOWN_HOURS,
+        "loading": loading,
         "containers": containers,
     }

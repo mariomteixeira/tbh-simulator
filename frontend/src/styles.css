@@ -1571,7 +1571,8 @@ button.link:hover { color: var(--st-bad); }
 
 /* Market: barra de progresso dos preços carregados (tema = barra do cubo) */
 .mk-progress { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
-.mk-progress-bar { flex: 1 1 auto; height: 14px; }
+/* trilho visível mesmo com pouco preenchimento (sobrepõe o bg translúcido do cubo) */
+.mk-progress-bar { flex: 1 1 auto; height: 16px; background: var(--panel-2); }
 /* largura total + scaleX (compositor, sem layout thrash) em vez de animar width */
 .mk-progress-bar span {
   width: 100%; animation: none; transform-origin: left;
