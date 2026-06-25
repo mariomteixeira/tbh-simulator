@@ -150,6 +150,28 @@ def test_market_panel_priced_and_pending():
     assert stash["matched"] == 1 and stash["pending"] == 1 and stash["sumReceive"] == 63
 
 
+def test_owned_market_names():
+    gd = _FakeGD({
+        110001: {"id": 110001, "name": {"en-US": "Minor Ruby"}, "grade": "COMMON",
+                 "type": "MATERIAL", "gear": None, "marketable": True},
+        533171: {"id": 533171, "name": {"en-US": "Dimensional Boots"}, "grade": "LEGENDARY",
+                 "type": "GEAR", "gear": "BOOTS", "level": 80, "marketable": True},
+        110002: {"id": 110002, "name": {"en-US": "Bound"}, "marketable": False},
+    })
+    save = {
+        "itemSaveDatas": [{"UniqueId": "u1", "ItemKey": 110001},
+                          {"UniqueId": "g1", "ItemKey": 533171},
+                          {"UniqueId": "u2", "ItemKey": 110002}],
+        "stashSaveDatas": [{"ItemUniqueId": "u1"}, {"ItemUniqueId": "g1"}, {"ItemUniqueId": "u2"}],
+        "inventorySaveDatas": [], "tradingStashSaveDatas": [],
+    }
+    names = sm.owned_market_names(gd, save)
+    assert "Minor Ruby" in names
+    assert "Dimensional Boots (Legendary) A" in names
+    assert "Bound" not in names              # não-negociável fica de fora
+    assert len(names) == 2
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

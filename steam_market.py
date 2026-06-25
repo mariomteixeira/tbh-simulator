@@ -167,16 +167,11 @@ class PriceCache:
                 time.sleep(self.interval)
 
 
-def market_panel(gd, save, cache, lang="en"):
-    """Itens marketáveis do inventário/stash/trading com valor de Steam."""
-    lang_code = {"pt": "pt-BR", "en": "en-US"}.get(lang, "en-US")
-    keep = 1 - STEAM_FEE
+def _iter_owned(gd, save):
+    """Itera os itens do inventário/stash/trading (ordem nativa, igual cubo),
+    rendendo (uid, item, en_name, hash_name, marketable). hash_name só nos
+    negociáveis (os outros = None)."""
     by_uid = {it.get("UniqueId"): it for it in save.get("itemSaveDatas") or []}
-
-    # 1ª passada: todos os itens (na ordem nativa, igual cubo) + nomes de mercado
-    # só dos negociáveis (esses é que vão pra busca de preço)
-    owned = []   # (uid, item, en, hash_name, marketable)
-    names = []
     for key in ("inventorySaveDatas", "stashSaveDatas", "tradingStashSaveDatas"):
         for s in save.get(key) or []:
             uid = s.get("ItemUniqueId")
@@ -187,10 +182,23 @@ def market_panel(gd, save, cache, lang="en"):
             mk = bool(item.get("marketable"))
             en = _en_name(item)
             hn = market_hash_name(item, en) if mk else None
-            owned.append((uid, item, en, hn, mk))
-            if hn:
-                names.append(hn)
-    cache.request(names)   # dispara as buscas que faltam
+            yield uid, item, en, hn, mk
+
+
+def owned_market_names(gd, save):
+    """Nomes de mercado dos itens negociáveis que o jogador tem (p/ aquecer o
+    cache em background, sem precisar abrir a página)."""
+    return [hn for _, _, _, hn, mk in _iter_owned(gd, save) if hn]
+
+
+def market_panel(gd, save, cache, lang="en"):
+    """Itens marketáveis do inventário/stash/trading com valor de Steam."""
+    lang_code = {"pt": "pt-BR", "en": "en-US"}.get(lang, "en-US")
+    keep = 1 - STEAM_FEE
+
+    # todos os itens (na ordem nativa); nomes de mercado só dos negociáveis
+    owned = list(_iter_owned(gd, save))
+    cache.request([hn for _, _, _, hn, _ in owned if hn])   # dispara as buscas que faltam
 
     def entry(uid, item, en, hn, mk):
         p = cache.get(hn) if hn else None

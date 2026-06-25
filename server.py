@@ -33,7 +33,7 @@ import tbh_tracker as core
 from simulator import (GameData, simulate, build_catalog, whatif_hero,
                        current_stage_ctx, rune_stats, set_lang)
 from store import Store
-from steam_market import PriceCache, market_panel
+from steam_market import PriceCache, market_panel, owned_market_names
 
 ROOT = Path(__file__).parent
 WEB_DIR = ROOT / "web"
@@ -305,6 +305,20 @@ class SaveWatcher:
 def build_app(watcher: SaveWatcher) -> FastAPI:
     app = FastAPI(title="TBH Copilot", docs_url=None, redoc_url=None)
     market_cache = PriceCache(GAMEDATA_DIR / "steam_prices_cache.json")
+
+    # aquece o cache de preços em background, sem depender da página estar aberta:
+    # assim que o save é lido (e a cada 60s) enfileira os itens vencidos; o worker
+    # do PriceCache faz a busca espaçada e o TTL (15min) cuida da atualização.
+    def _warm_market():
+        while True:
+            gd, save = watcher.gamedata, getattr(watcher, "_inner", None)
+            if gd and save:
+                try:
+                    market_cache.request(owned_market_names(gd, save))
+                except Exception:
+                    pass
+            time.sleep(60)
+    threading.Thread(target=_warm_market, daemon=True).start()
 
     @app.get("/api/snapshot")
     def api_snapshot(lang: str = "en"):
