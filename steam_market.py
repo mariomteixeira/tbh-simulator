@@ -12,6 +12,7 @@ from pathlib import Path
 
 STEAM_APPID = 3678970
 CURRENCY_BRL = 7
+COUNTRY_BR = "BR"                # força localização BRL consistente no render
 STEAM_FEE = 0.30                 # taxa da Steam (definido pelo usuário)
 TRADESHIP_COOLDOWN_HOURS = 8     # cooldown do tradeship (definido pelo usuário)
 
@@ -38,18 +39,21 @@ def parse_render_page(obj):
     return out, (obj or {}).get("total_count") or 0
 
 
-def _fetch_page(appid, currency, start, count):
+def _fetch_page(appid, currency, start, count, country=COUNTRY_BR):
     qs = urllib.parse.urlencode({"appid": appid, "norender": 1,
                                  "start": start, "count": count,
-                                 "currency": currency})
+                                 "currency": currency, "country": country})
     url = "https://steamcommunity.com/market/search/render/?" + qs
     req = urllib.request.Request(url, headers=_UA)
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
-def fetch_all_prices(appid=STEAM_APPID, currency=CURRENCY_BRL, fetch=_fetch_page):
+def fetch_all_prices(appid=STEAM_APPID, currency=CURRENCY_BRL,
+                     country=COUNTRY_BR, fetch=None):
     """Pagina o render até cobrir total_count. normalized_name -> entry."""
+    if fetch is None:
+        fetch = lambda a, c, s, n: _fetch_page(a, c, s, n, country)
     prices, start, total = {}, 0, None
     while True:
         rows, total = parse_render_page(fetch(appid, currency, start, 100))
