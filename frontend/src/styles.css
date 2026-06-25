@@ -1591,3 +1591,26 @@ button.link:hover { color: var(--st-bad); }
   color: var(--accent); text-decoration: none;
 }
 .mk-link:hover { text-decoration: underline; }
+
+/* Market: busca + painel de log (debug) */
+.mk-search {
+  font-family: var(--mono); font-size: .82rem; color: var(--ink);
+  background: var(--bg); border: 2px solid var(--line);
+  padding: 7px 10px; min-width: 160px;
+}
+.mk-search:focus { outline: none; border-color: var(--accent); }
+.mk-debug { margin-top: 12px; border-top: 2px solid var(--line); padding-top: 8px; }
+.mk-debug-rows {
+  margin-top: 6px; max-height: 180px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.mk-debug-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-family: var(--mono); font-size: .72rem;
+}
+.mk-dbg-name { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-dbg-st { white-space: nowrap; }
+.mk-dbg-st.st-ok { color: var(--ok, #7bbf6a); }
+.mk-dbg-st.st-429 { color: var(--bad, #d9534f); }
+.mk-dbg-st.st-error { color: var(--bad, #d9534f); }
+.mk-dbg-st.st-no_listing { color: var(--dim); }

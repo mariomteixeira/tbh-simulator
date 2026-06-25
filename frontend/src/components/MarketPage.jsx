@@ -104,6 +104,7 @@ export default function MarketPage() {
   const [page, setPage] = useState(0);
   const [sel, setSel] = useState(null);
   const [sortVal, setSortVal] = useState(false);
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -122,9 +123,11 @@ export default function MarketPage() {
 
   const slots = useMemo(() => {
     if (!cont) return [];
+    const ql = q.trim().toLowerCase();
+    if (ql) return cont.slots.filter((e) => e && (e.name || "").toLowerCase().includes(ql));
     if (!sortVal) return cont.slots; // ordem nativa (igual cubo) — cada página = 1 aba do stash
     return cont.slots.filter(Boolean).sort((a, b) => (b.receive || 0) - (a.receive || 0));
-  }, [cont, sortVal]);
+  }, [cont, sortVal, q]);
 
   if (!data && !err)
     return <main className="page no-rail"><div className="loading">{t("loading…", "carregando…")}</div></main>;
@@ -165,6 +168,13 @@ export default function MarketPage() {
               ))}
             </div>
             <div className="cube-toggles">
+              <input
+                className="mk-search"
+                type="search"
+                value={q}
+                placeholder={t("search", "buscar")}
+                onChange={(e) => { setQ(e.target.value); setPage(0); }}
+              />
               <button
                 className={"cube-toggle" + (sortVal ? " on" : "")}
                 onClick={() => { setSortVal((v) => !v); setPage(0); }}
@@ -200,6 +210,31 @@ export default function MarketPage() {
                   {i + 1}
                 </button>
               ))}
+            </div>
+          )}
+
+          {data.debug && (
+            <div className="mk-debug">
+              <div className="mk-debug-head muted small">
+                {t("fetch log", "log de busca")} · {t("queued", "fila")} {data.debug.queued}
+                {data.debug.pausedSecs > 0 && ` · ${t("paused", "pausado")} ${data.debug.pausedSecs}s`}
+              </div>
+              <div className="mk-debug-rows">
+                {[...data.debug.activity].reverse().map((a, i) => (
+                  <div className="mk-debug-row" key={i}>
+                    <span className="mk-dbg-name">{a.name}</span>
+                    <span className={"mk-dbg-st st-" + a.status}>
+                      {a.status === "ok" ? `OK · ${brl(a.cents)}`
+                        : a.status === "no_listing" ? t("no listing", "sem listagem")
+                        : a.status === "429" ? "429"
+                        : t("error", "erro")}
+                    </span>
+                  </div>
+                ))}
+                {data.debug.activity.length === 0 && (
+                  <div className="muted small">{t("no fetches yet", "nenhuma busca ainda")}</div>
+                )}
+              </div>
             </div>
           )}
         </div>

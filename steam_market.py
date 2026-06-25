@@ -114,6 +114,23 @@ class PriceCache:
         self._q = queue.Queue()
         self._worker = None
         self._pause_until = 0            # circuit breaker: não busca enquanto > now
+        self._activity = []              # log das últimas buscas (p/ debug na UI)
+
+    def _record(self, name, status, cents=None):
+        self._activity.append({"name": name, "status": status,
+                               "cents": cents, "ts": self._now()})
+        if len(self._activity) > 30:
+            self._activity = self._activity[-30:]
+
+    def status(self):
+        """Estado p/ o painel de debug: log de buscas, fila e pausa."""
+        with self._lock:
+            return {
+                "activity": list(self._activity),
+                "queued": len(self._queued),
+                "pausedSecs": max(0, round(self._pause_until - self._now())),
+                "cached": len(self._data),
+            }
 
     def _load(self):
         try:
@@ -172,9 +189,11 @@ class PriceCache:
             except Exception as e:
                 # 429/rede: NÃO descarta o valor bom; tira da fila e recua.
                 # _needs_refresh continua True, então o próximo request() re-tenta.
+                is_429 = getattr(e, "code", None) == 429
                 with self._lock:
                     self._queued.discard(name)
-                if getattr(e, "code", None) == 429:
+                    self._record(name, "429" if is_429 else "error")
+                if is_429:
                     consec_429 += 1
                     if consec_429 >= self.max_429:
                         # circuit breaker: para tudo e pausa, pra não fritar o IP
@@ -189,10 +208,13 @@ class PriceCache:
             with self._lock:
                 if res.get("success") and res.get("cents") is not None:
                     self._data[name] = {**res, "ts": self._now()}      # preço bom
+                    self._record(name, "ok", res.get("cents"))
                 elif name not in self._data:
                     self._data[name] = {"success": False, "ts": self._now()}
+                    self._record(name, "no_listing")
                 else:
                     self._data[name]["ts"] = self._now()               # mantém valor, adia
+                    self._record(name, "no_listing")
                 self._queued.discard(name)
                 self._save()
             time.sleep(self.interval)
@@ -263,10 +285,14 @@ def market_panel(gd, save, cache, lang="en"):
             "pending": sum(1 for e in items if e["pending"]),
             "sumReceive": sum(e["receive"] or 0 for e in items),
         })
-    return {
+    result = {
         "appid": STEAM_APPID,
         "feePct": round(STEAM_FEE * 100),
         "cooldownHours": TRADESHIP_COOLDOWN_HOURS,
         "loading": pending_any,
         "containers": containers,
     }
+    status_fn = getattr(cache, "status", None)
+    if callable(status_fn):
+        result["debug"] = status_fn()
+    return result

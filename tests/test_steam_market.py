@@ -45,6 +45,20 @@ def test_price_cache_fetches_and_persists():
         assert calls == ["X"]
 
 
+def test_price_cache_status_activity_log():
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "p.json"
+        def fetch(name, appid, currency):
+            return {"success": True, "cents": 226} if name == "A" else {"success": False}
+        c = sm.PriceCache(path, ttl=100, interval=0, fetch=fetch, now=lambda: 1000.0)
+        c.request(["A", "B"]); c._worker.join(timeout=5)
+        st = c.status()
+        log = {a["name"]: a for a in st["activity"]}
+        assert log["A"]["status"] == "ok" and log["A"]["cents"] == 226
+        assert log["B"]["status"] == "no_listing"
+        assert st["queued"] == 0 and st["pausedSecs"] == 0
+
+
 def test_price_cache_never_discards_on_429():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "p.json"
