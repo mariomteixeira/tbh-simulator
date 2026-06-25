@@ -33,7 +33,7 @@ import tbh_tracker as core
 from simulator import (GameData, simulate, build_catalog, whatif_hero,
                        current_stage_ctx, rune_stats, set_lang)
 from store import Store
-from steam_market import SteamMarketCache, market_panel
+from steam_market import PriceCache, market_panel
 
 ROOT = Path(__file__).parent
 WEB_DIR = ROOT / "web"
@@ -304,7 +304,7 @@ class SaveWatcher:
 
 def build_app(watcher: SaveWatcher) -> FastAPI:
     app = FastAPI(title="TBH Copilot", docs_url=None, redoc_url=None)
-    market_cache = SteamMarketCache(GAMEDATA_DIR / "steam_market_cache.json")
+    market_cache = PriceCache(GAMEDATA_DIR / "steam_prices_cache.json")
 
     @app.get("/api/snapshot")
     def api_snapshot(lang: str = "en"):

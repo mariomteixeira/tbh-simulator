@@ -12,7 +12,7 @@
 /gamedata/icons/heroes/
 
 # Cache de precos do Steam Market (runtime, muda por hora — nao versionar).
-/gamedata/steam_market_cache.json
+/gamedata/steam_prices_cache.json
 
 # Artefatos da skill impeccable (critique snapshots, hook cache) — nao versionar.
 .impeccable/
