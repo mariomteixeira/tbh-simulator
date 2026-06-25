@@ -106,6 +106,27 @@ def test_price_cache_circuit_breaker_pauses_on_repeated_429():
         assert c.get("A")["cents"] == 50               # volta a funcionar sozinho
 
 
+def test_circuit_breaker_progressive_backoff():
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "p.json"
+        clock = [1000.0]
+        class _429(Exception):
+            code = 429
+        def boom(name, appid, currency):
+            raise _429("429")
+        c = sm.PriceCache(path, interval=0, backoff=0, max_429=2, cooldown=100,
+                          max_cooldown=10000, fetch=boom, now=lambda: clock[0])
+        c.request(["A", "B"])
+        if c._worker:
+            c._worker.join(timeout=5)
+        assert c._pause_until == 1000 + 100        # 1ª pausa = base
+        clock[0] = 1100.0                          # pausa expira, IP ainda bloqueado
+        c.request(["A", "B"])
+        if c._worker:
+            c._worker.join(timeout=5)
+        assert c._pause_until == 1100 + 200        # 2ª pausa = 2× base (recuo dobra)
+
+
 def test_price_cache_no_listing_recorded():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "p.json"

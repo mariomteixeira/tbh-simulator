@@ -95,7 +95,7 @@ class PriceCache:
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
                  ttl=20 * 60, fail_ttl=20 * 60, interval=6.0, backoff=60,
-                 max_429=5, cooldown=15 * 60,
+                 max_429=5, cooldown=15 * 60, max_cooldown=60 * 60,
                  fetch=_fetch_priceoverview, now=time.time):
         self.path = Path(path)
         self.appid = appid
@@ -105,7 +105,8 @@ class PriceCache:
         self.interval = interval    # 6s -> teto ~10 req/min
         self.backoff = backoff      # pausa após 429
         self.max_429 = max_429      # 429s seguidos antes de pausar tudo
-        self.cooldown = cooldown    # quanto tempo o circuit breaker pausa
+        self.cooldown = cooldown    # pausa base do circuit breaker
+        self.max_cooldown = max_cooldown  # teto da pausa (recuo progressivo)
         self._fetch = fetch
         self._now = now
         self._lock = threading.Lock()
@@ -114,6 +115,7 @@ class PriceCache:
         self._q = queue.Queue()
         self._worker = None
         self._pause_until = 0            # circuit breaker: não busca enquanto > now
+        self._breaker_trips = 0          # pausas seguidas (recuo progressivo)
         self._activity = []              # log das últimas buscas (p/ debug na UI)
 
     def _record(self, name, status, cents=None):
@@ -196,9 +198,14 @@ class PriceCache:
                 if is_429:
                     consec_429 += 1
                     if consec_429 >= self.max_429:
-                        # circuit breaker: para tudo e pausa, pra não fritar o IP
+                        # circuit breaker: para tudo e pausa. Recuo progressivo —
+                        # se o IP segue bloqueado, cada pausa dobra (até o teto),
+                        # pra não insistir de 15 em 15min num IP punido por horas.
                         with self._lock:
-                            self._pause_until = self._now() + self.cooldown
+                            pause = min(self.cooldown * (2 ** self._breaker_trips),
+                                        self.max_cooldown)
+                            self._pause_until = self._now() + pause
+                            self._breaker_trips += 1
                         return
                     time.sleep(self.backoff)
                 else:
@@ -206,6 +213,7 @@ class PriceCache:
                 continue
             consec_429 = 0
             with self._lock:
+                self._breaker_trips = 0   # respondeu (IP ok) -> zera o recuo
                 if res.get("success") and res.get("cents") is not None:
                     self._data[name] = {**res, "ts": self._now()}      # preço bom
                     self._record(name, "ok", res.get("cents"))
