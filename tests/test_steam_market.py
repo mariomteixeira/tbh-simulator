@@ -69,6 +69,27 @@ def test_price_cache_failure_short_ttl():
         assert c.get("X") is None
 
 
+def test_price_cache_no_listing_cached_long():
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "p.json"
+        clock = [1000.0]
+        calls = []
+
+        def no_listing(name, appid, currency):
+            calls.append(name)
+            return {"success": False}              # Steam respondeu: sem listagem
+
+        c = sm.PriceCache(path, ttl=100, miss_ttl=10000, fail_ttl=10, interval=0,
+                          fetch=no_listing, now=lambda: clock[0])
+        c.request(["X"]); c._worker.join(timeout=5)
+        e = c.get("X")
+        assert e is not None and e.get("success") is False and not e.get("error")
+        clock[0] = 1050.0                           # passou fail_ttl(10), dentro de miss_ttl
+        c.request(["X"])                            # NÃO re-busca (não é erro transitório)
+        assert c._worker is None or not c._worker.is_alive()
+        assert calls == ["X"]
+
+
 class _FakeCache:
     def __init__(self, data): self._d = data; self.requested = []
     def request(self, names): self.requested += list(names)

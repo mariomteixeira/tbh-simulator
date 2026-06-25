@@ -88,13 +88,14 @@ class PriceCache:
     em background que busca um item por vez (espaçado) pra não tomar 429."""
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
-                 ttl=6 * 3600, fail_ttl=120, interval=3.0,
+                 ttl=6 * 3600, miss_ttl=6 * 3600, fail_ttl=120, interval=3.0,
                  fetch=_fetch_priceoverview, now=time.time):
         self.path = Path(path)
         self.appid = appid
         self.currency = currency
-        self.ttl = ttl
-        self.fail_ttl = fail_ttl
+        self.ttl = ttl              # tem preço: revalida em ttl
+        self.miss_ttl = miss_ttl    # sem listagem (resposta definitiva): cacheia bastante
+        self.fail_ttl = fail_ttl    # erro de rede/429 (transitório): re-tenta logo
         self.interval = interval
         self._fetch = fetch
         self._now = now
@@ -119,7 +120,12 @@ class PriceCache:
     def _fresh(self, e):
         if not e:
             return False
-        ttl = self.ttl if e.get("success") else self.fail_ttl
+        if e.get("success"):
+            ttl = self.ttl
+        elif e.get("error"):           # rede/429 — transitório, re-tenta logo
+            ttl = self.fail_ttl
+        else:                          # Steam disse "sem listagem" — cacheia bastante
+            ttl = self.miss_ttl
         return (self._now() - e.get("ts", 0)) < ttl
 
     def get(self, name):
@@ -152,7 +158,7 @@ class PriceCache:
             try:
                 res = self._fetch(name, self.appid, self.currency)
             except Exception:
-                res = {"success": False}
+                res = {"success": False, "error": True}   # transitório (rede/429)
             with self._lock:
                 self._data[name] = {**res, "ts": self._now()}
                 self._queued.discard(name)
