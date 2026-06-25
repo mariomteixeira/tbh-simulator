@@ -22,7 +22,7 @@ function Cell({ e, selected, onClick }) {
     >
       <ItemIcon e={e} />
       {e.level != null && <span className="cube-lv">{e.level}</span>}
-      <span className="cube-exp mk-price">{e.matched ? brl(e.listed) : "—"}</span>
+      <span className="cube-exp mk-price">{e.matched ? brl(e.listed) : e.pending ? "…" : "—"}</span>
     </button>
   );
 }
@@ -78,6 +78,10 @@ function Detail({ e, fee, cooldown, appid }) {
             </a>
           )}
         </>
+      ) : e.pending ? (
+        <p className="muted small" style={{ marginTop: 12 }}>
+          {t("fetching price…", "buscando preço…")}
+        </p>
       ) : (
         <p className="muted small" style={{ marginTop: 12 }}>
           {t("Not listed on the Steam Market.", "Não listado no Steam Market.")}
@@ -104,7 +108,7 @@ export default function MarketPage() {
         .then((d) => { if (alive) { setData(d); setErr(d.error || null); } })
         .catch((e) => { if (alive) setErr(String(e)); });
     load();
-    const id = setInterval(load, 15000);
+    const id = setInterval(load, 6000); // worker preenche ~1 preço/3s; recarrega pra mostrar
     return () => { alive = false; clearInterval(id); };
   }, [lang]);
 
@@ -154,7 +158,7 @@ export default function MarketPage() {
             <div className="cube-sub muted small">
               {cont.matched}/{cont.filled} {t("priced", "com preço")} ·{" "}
               <span className="v-gold">{brl(cont.sumReceive)}</span> {t("if you sell all", "vendendo tudo")}
-              {data.stale && <span className="muted"> · {t("prices may be stale", "preços podem estar defasados")}</span>}
+              {cont.pending > 0 && <span className="muted"> · {cont.pending} {t("loading…", "carregando…")}</span>}
             </div>
           )}
 
