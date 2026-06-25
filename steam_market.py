@@ -1,11 +1,13 @@
 """Preços do Steam Community Market para a página Mercado.
 
 Estratégia: UM sweep em lote do mercado inteiro (endpoint search/render) com
-`country=BR` — que é o único jeito de vir tudo em BRL de forma confiável (sem
-country a moeda oscila entre R$ e US$ na mesma resposta; o priceoverview por
-item é confiável mas toma 429 com dezenas de itens). O sweep roda em background,
-salva incrementalmente em disco e NUNCA descarta um preço já conhecido (falha
-parcial/429 mantém o que já tem). TTL 15min. Sem dependências externas.
+`currency=7`. O `sell_price` INTEIRO já vem em centavos de BRL mesmo quando o
+`sell_price_text` mostra "$" (só o símbolo do texto é bugado; o número é BRL —
+validado comparando com o modo country=BR: inteiros idênticos). Por isso usamos
+o inteiro e ignoramos o texto, e NÃO passamos country (que limitaria a 10 itens
+por página); assim o mercado inteiro sai em ~8 requisições de 100. O sweep roda
+em background, salva incrementalmente em disco e NUNCA descarta um preço já
+conhecido (falha parcial/429 mantém o que já tem). Sem dependências externas.
 
 Casamento item -> preço:
 - material/gem/soulstone/coin: nome inglês exato ("Twilight Amethyst").
@@ -21,8 +23,7 @@ import urllib.request
 from pathlib import Path
 
 STEAM_APPID = 3678970
-CURRENCY_BRL = 7
-COUNTRY_BR = "BR"                # força BRL consistente no render
+CURRENCY_BRL = 7                 # sell_price (inteiro) vem em centavos de BRL
 STEAM_FEE = 0.30                 # taxa da Steam (definido pelo usuário)
 TRADESHIP_COOLDOWN_HOURS = 8     # cooldown do tradeship (definido pelo usuário)
 
@@ -49,10 +50,12 @@ def parse_render_page(obj):
     return out, (obj or {}).get("total_count") or 0
 
 
-def _fetch_page(appid, currency, start, count, country=COUNTRY_BR):
+def _fetch_page(appid, currency, start, count):
+    # SEM country: assim o render devolve 100/página (não 10). currency=7 já põe
+    # o sell_price inteiro em centavos de BRL (o símbolo no texto é irrelevante).
     qs = urllib.parse.urlencode({"appid": appid, "norender": 1,
                                  "start": start, "count": count,
-                                 "currency": currency, "country": country})
+                                 "currency": currency})
     url = "https://steamcommunity.com/market/search/render/?" + qs
     req = urllib.request.Request(url, headers=_UA)
     with urllib.request.urlopen(req, timeout=20) as r:
@@ -65,12 +68,11 @@ class MarketCache:
     preço conhecido."""
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
-                 country=COUNTRY_BR, ttl=3 * 60, interval=1.0, count=100,
+                 ttl=3 * 60, interval=0.6, count=100,
                  fetch=_fetch_page, now=time.time):
         self.path = Path(path)
         self.appid = appid
         self.currency = currency
-        self.country = country
         self.ttl = ttl
         self.interval = interval
         self.count = count
@@ -128,8 +130,7 @@ class MarketCache:
         try:
             while True:
                 try:
-                    page = self._fetch(self.appid, self.currency, start,
-                                       self.count, self.country)
+                    page = self._fetch(self.appid, self.currency, start, self.count)
                 except urllib.error.HTTPError as e:
                     if e.code == 429 and retries < 8:
                         retries += 1
@@ -144,13 +145,12 @@ class MarketCache:
                     break
                 with self._lock:
                     for e in rows:
-                        text = e.get("sell_price_text") or ""
-                        if text.strip().startswith("$"):
-                            continue          # defensivo: ignora linha em USD
+                        cents = e.get("sell_price")
+                        if cents is None:
+                            continue          # sem preço (ninguém vendendo)
                         self._prices[normalize_name(e["hash_name"])] = {
                             "hash_name": e["hash_name"],
-                            "cents": e.get("sell_price"),
-                            "text": text,
+                            "cents": cents,    # inteiro já em centavos de BRL
                         }
                     self._progress = (start + len(rows), total)
                     self._save()              # incremental: progresso aparece já
@@ -231,7 +231,6 @@ def market_panel(gd, save, cache, lang="en"):
             "level": item.get("level"),
             "marketable": mk,
             "listed": listed,
-            "listedText": p.get("text") if priced else None,
             "receive": round(listed * keep) if priced else None,
             "matched": priced,
             "pending": bool(mk and not priced and loading),  # ainda carregando o mercado

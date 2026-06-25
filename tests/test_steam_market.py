@@ -42,8 +42,9 @@ def test_market_cache_sweeps_persists_never_discards():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "p.json"
         clock = [1000.0]
-        # sweep 1: A,B (página 0) + C (página 2) + linha em USD ignorada
-        def fetch1(appid, currency, start, count, country):
+        # sweep 1: A,B,Junk (página 0) + C (página 3). texto em "$" é IRRELEVANTE
+        # — o inteiro já é centavos de BRL, então Junk também é guardado.
+        def fetch1(appid, currency, start, count):
             if start == 0:
                 return {"total_count": 4, "results": [
                     {"hash_name": "A", "sell_price": 10, "sell_price_text": "R$ 0,10"},
@@ -58,13 +59,13 @@ def test_market_cache_sweeps_persists_never_discards():
         c.ensure(); c._worker.join(timeout=5)
         p = c.prices()
         assert p[N("A")]["cents"] == 10 and p[N("C")]["cents"] == 30
-        assert N("Junk") not in p                  # linha USD ignorada
+        assert p[N("Junk")]["cents"] == 4          # inteiro é BRL, símbolo do texto ignorado
         assert path.exists()
         assert c._fresh() and not c.loading()
 
         # sweep 2 (vencido): retorna só A atualizado; B e C NÃO podem sumir
         clock[0] = 1200.0
-        def fetch2(appid, currency, start, count, country):
+        def fetch2(appid, currency, start, count):
             if start == 0:
                 return {"total_count": 1, "results": [
                     {"hash_name": "A", "sell_price": 99, "sell_price_text": "R$ 0,99"}]}
@@ -80,7 +81,7 @@ def test_market_cache_fresh_skips_sweep():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "p.json"
         calls = [0]
-        def fetch(appid, currency, start, count, country):
+        def fetch(appid, currency, start, count):
             calls[0] += 1
             return {"total_count": 1, "results": [
                 {"hash_name": "A", "sell_price": 1, "sell_price_text": "R$ 0,01"}]} if start == 0 else {"results": []}
