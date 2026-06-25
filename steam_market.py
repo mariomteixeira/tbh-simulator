@@ -65,7 +65,7 @@ class MarketCache:
     preço conhecido."""
 
     def __init__(self, path, appid=STEAM_APPID, currency=CURRENCY_BRL,
-                 country=COUNTRY_BR, ttl=15 * 60, interval=1.5, count=100,
+                 country=COUNTRY_BR, ttl=3 * 60, interval=1.0, count=100,
                  fetch=_fetch_page, now=time.time):
         self.path = Path(path)
         self.appid = appid
