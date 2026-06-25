@@ -135,8 +135,18 @@ export default function MarketPage() {
   const pg = Math.min(page, pages - 1);
   const view = slots.slice(pg * PAGE, pg * PAGE + PAGE);
 
+  const tradable = containers.reduce((s, c) => s + (c.tradable || 0), 0);
+  const priced = containers.reduce((s, c) => s + (c.matched || 0), 0);
+  const pricedPct = tradable ? Math.round((priced / tradable) * 100) : 0;
+
   return (
     <main className="page cube-page no-rail">
+      {tradable > 0 && (
+        <div className="mk-progress">
+          <div className="cube-bar mk-progress-bar"><span style={{ transform: `scaleX(${pricedPct / 100})` }} /></div>
+          <b className="mk-progress-num">{priced}/{tradable}</b>
+        </div>
+      )}
       <div className="cube-split">
         <div className="cube-left">
           <div className="cube-bar-row">

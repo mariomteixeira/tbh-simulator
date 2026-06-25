@@ -1569,6 +1569,19 @@ button.link:hover { color: var(--st-bad); }
 @media (max-width: 1080px) { .builds-page .editor { grid-template-columns: 1fr; } .builds-page .card { position: static; } }
 @media (max-width: 940px) { .builds-page .statlist { grid-template-columns: 1fr; } }
 
+/* Market: barra de progresso dos preços carregados (tema = barra do cubo) */
+.mk-progress { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.mk-progress-bar { flex: 1 1 auto; height: 14px; }
+/* largura total + scaleX (compositor, sem layout thrash) em vez de animar width */
+.mk-progress-bar span {
+  width: 100%; animation: none; transform-origin: left;
+  transition: transform .4s cubic-bezier(.2, .8, .2, 1);
+}
+.mk-progress-num {
+  font-family: var(--mono); font-size: .9rem; color: var(--accent);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
 /* Market: preço na célula + link da Steam (reusa o layout do cubo) */
 .mk-price { color: var(--gold); font-variant-numeric: tabular-nums; }
 .cube-cell.locked .mk-price { color: var(--muted); }
