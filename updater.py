@@ -19,6 +19,7 @@ Uso pelo launcher (tbh_painel) ou na mao:
 
 import io
 import json
+import ssl
 import sys
 import urllib.request
 import zipfile
@@ -27,6 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / "update_config.json"
 VERSION_FILE = ROOT / ".version"
+CACERT = ROOT / "cacert.pem"        # bundle de CAs (certifi) p/ Python sem certs
 # nunca sobrescrever (dados do jogador e runtime); .git so existe no dev
 PRESERVE = {"data", "python", ".git", ".version", "node_modules",
             "dist-portable", "reference"}
@@ -50,6 +52,40 @@ def _headers(cfg):
     return h
 
 
+def _ssl_ctx(cfg):
+    """Contexto SSL tolerante a Python sem CA certs (caso comum no runtime
+    portatil do Windows). Adiciona o bundle do certifi + o store do Windows.
+    Com "insecure": true no update_config.json, pula a verificacao (ultimo
+    recurso, ex.: antivirus interceptando HTTPS)."""
+    if cfg.get("insecure"):
+        sys.stderr.write("[updater] AVISO: SSL sem verificacao (insecure)\n")
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    ctx = ssl.create_default_context()
+    if CACERT.exists():
+        try:
+            ctx.load_verify_locations(cafile=str(CACERT))   # roots do certifi
+        except OSError:
+            pass
+    try:
+        ctx.load_default_certs()        # + store do Windows (pega AV/corporativo)
+    except Exception:
+        pass
+    return ctx
+
+
+def _err_hint(e):
+    s = str(e)
+    if "CERTIFICATE_VERIFY_FAILED" in s or "SSL" in s.upper():
+        return (f"{e} -> erro de certificado SSL. Tente, nesta ordem: "
+                "(1) corrigir a DATA/HORA do PC; "
+                "(2) desligar a 'verificacao HTTPS/SSL' do antivirus; "
+                '(3) adicionar "insecure": true ao update_config.json.')
+    return s
+
+
 def local_sha() -> str:
     try:
         return VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -62,7 +98,7 @@ def remote_sha(cfg) -> str:
            f"{cfg.get('branch', 'main')}")
     req = urllib.request.Request(
         url, headers={**_headers(cfg), "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx(cfg)) as r:
         return json.loads(r.read())["sha"]
 
 
@@ -87,7 +123,7 @@ def _download_zip(cfg) -> bytes:
         url = (f"https://codeload.github.com/{cfg['repo']}/zip/refs/heads/"
                f"{cfg.get('branch', 'main')}")
     req = urllib.request.Request(url, headers=_headers(cfg))
-    with urllib.request.urlopen(req, timeout=180) as r:
+    with urllib.request.urlopen(req, timeout=180, context=_ssl_ctx(cfg)) as r:
         return r.read()
 
 
@@ -118,7 +154,7 @@ def apply_update():
     try:
         rs = remote_sha(cfg)
     except Exception as e:
-        return False, f"sem acesso ao GitHub ({e})"
+        return False, f"sem acesso ao GitHub: {_err_hint(e)}"
     if rs == local_sha():
         return True, "ja esta na ultima versao"
     try:
